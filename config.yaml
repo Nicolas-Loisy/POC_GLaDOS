@@ -1,0 +1,94 @@
+# Configuration GLaDOS Assistant Vocal
+# =================================
+
+# Configuration du moteur ReAct
+core:
+  model_name: "gpt-3.5-turbo"
+  max_iterations: 15
+  verbose: true
+  temperature: 0.1
+  openai_api_key: ${OPENAI_API_KEY}  # Variable d'environnement
+
+# Modules d'entrée (Input)
+inputs:
+  enabled: true
+  
+  # Wake word + Speech-to-Text
+  wake_word:
+    enabled: true
+    porcupine_access_key: ${PORCUPINE_ACCESS_KEY}
+    model_path: "wake_word_model/porcupine_params_de.pv"
+    keyword_paths: ["wake_words/glados_de_windows_v3_0_0.ppn"]
+    stt:
+      model_path: "vosk-model-small-fr-0.22"
+      sample_rate: 16000
+      device_id: 1  # Réseau de microphones
+      max_recording_duration: 8
+      silence_threshold: 500
+      min_silence_duration: 1.0
+  
+  # Discord Bot
+  discord:
+    enabled: false
+    bot_token: ${DISCORD_BOT_TOKEN}
+    command_prefix: "!"
+    allowed_channels: []  # Vide = tous les canaux
+    allowed_users: []     # Vide = tous les utilisateurs
+  
+  # Interface Terminal
+  terminal:
+    enabled: true
+    prompt: "GLaDOS> "
+    history_size: 100
+
+# Modules de sortie (Output)
+outputs:
+  enabled: true
+  
+  # Text-to-Speech GLaDOS
+  tts_glados:
+    enabled: true
+    model_path: "models/fr_FR-glados-medium.onnx"
+    device_id: 5  # SONY TV
+    sample_rate: 22050
+    volume: 0.8
+  
+  # Sortie Terminal
+  terminal:
+    enabled: true
+    color_scheme: "green"  # green, blue, red, white
+    prefix: "[GLaDOS] "
+
+# Configuration des outils/actions
+tools:
+  # Contrôle des appareils Tapo
+  tapo:
+    enabled: true
+    email: ${TAPO_EMAIL}
+    password: ${TAPO_PASSWORD}
+    devices:
+      lampe_chambre:
+        type: "L530"
+        ip: "192.168.1.186"
+        name: "Lampe de chambre"
+      prise_chambre:
+        type: "P110"
+        ip: "192.168.1.110"
+        name: "Prise de chambre"
+  
+  # Contrôle infrarouge
+  ir_control:
+    enabled: false
+    devices:
+      yamaha_amplifier:
+        type: "yamaha"
+        commands: ["power_on", "power_off", "volume_up", "volume_down"]
+      osram_light:
+        type: "osram"
+        commands: ["toggle", "dim_up", "dim_down"]
+
+# Logging et debug
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "glados.log"
+  console: true

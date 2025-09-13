@@ -1,0 +1,29 @@
+# Core dependencies
+llama-index>=0.9.0
+llama-index-core>=0.10.0
+llama-index-agent-openai>=0.2.0
+
+# Audio processing
+sounddevice>=0.5.0
+pvporcupine>=3.0.0
+vosk>=0.3.45
+piper-tts>=1.2.0
+numpy>=1.24.0
+
+# Discord integration
+discord.py>=2.3.0
+
+# IoT/Automation
+python-tapo>=0.4.0
+
+# Configuration and utilities
+pyyaml>=6.0
+python-dotenv>=1.0.0
+asyncio-mqtt>=0.13.0
+click>=8.1.0
+
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+flake8>=6.0.0

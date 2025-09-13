@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(E:\\Nicolas\\Workspace\\MarkIO\\Scripts/**)",
+      "Read(E:\\Nicolas\\Workspace\\MarkIO\\Scripts\\BT_TAPO/**)",
+      "Read(E:\\Nicolas\\Workspace\\MarkIO\\Scripts\\BT_TAPO/**)",
+      "Read(E:\\Nicolas\\Workspace\\MarkIO\\Scripts\\IR_OSRAM/**)",
+      "Bash(git checkout:*)",
+      "Bash(mkdir:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
