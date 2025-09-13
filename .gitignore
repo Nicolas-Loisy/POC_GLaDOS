@@ -1,3 +1,8 @@
 vosk-model-small-fr-0.22/
 wake_word_model/
 wake_words/
+.venv/
+**/__pycache__/
+models/
+.env
+**.log

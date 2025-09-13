@@ -6,7 +6,7 @@ Orchestrateur principal qui gère les interactions entre inputs, outputs et tool
 import asyncio
 from typing import Dict, List, Any, Optional
 import logging
-from llama_index.core.agent import ReActAgent
+from llama_index.core.agent.workflow import ReActAgent
 from llama_index.llms.openai import OpenAI
 from llama_index.core.tools import BaseTool, FunctionTool
 from llama_index.core.memory import ChatMemoryBuffer
@@ -122,16 +122,14 @@ class GLaDOSReActEngine:
     async def _initialize_agent(self) -> None:
         """Initialise l'agent ReAct"""
         system_prompt = self._build_system_prompt()
-        
-        self.agent = ReActAgent.from_tools(
+
+        self.agent = ReActAgent(
             tools=self.tools,
             llm=self.llm,
-            memory=self.memory,
-            system_prompt=system_prompt,
-            max_iterations=self.config.core.max_iterations,
+            timeout=120,
             verbose=self.config.core.verbose
         )
-        
+
         self.logger.info("Agent ReAct initialisé")
     
     def _build_system_prompt(self) -> str:
@@ -288,10 +286,13 @@ Outils disponibles :
         Traite une requête avec l'agent ReAct
         """
         try:
-            # Utiliser l'agent pour traiter la requête
-            response = await self.agent.achat(query)
-            return str(response)
-        
+            # Utiliser l'agent pour traiter la requête avec l'API Workflow
+            from llama_index.core.agent.workflow import Context
+
+            ctx = Context()
+            result = await self.agent.run(ctx=ctx, query=query)
+            return str(result)
+
         except Exception as e:
             self.logger.error(f"Erreur lors du traitement par l'agent: {e}")
             return f"Je n'ai pas pu traiter votre demande: {str(e)}"

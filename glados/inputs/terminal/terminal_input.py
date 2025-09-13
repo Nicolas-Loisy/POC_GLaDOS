@@ -7,7 +7,6 @@ import asyncio
 import sys
 import logging
 from typing import Dict, Any, List
-from concurrent.futures import ThreadPoolExecutor
 
 from ...core.interfaces import InputModule, GLaDOSMessage, MessageType, GLaDOSEvent
 
@@ -29,15 +28,15 @@ class TerminalInput(InputModule):
         # État
         self.history: List[str] = []
         self.listening_task = None
-        self.executor = ThreadPoolExecutor(max_workers=1)
     
     async def initialize(self) -> bool:
         """Initialise le module terminal"""
         try:
             self.logger.info("Initialisation du module Terminal...")
+            self.is_active = True
             self.logger.info("Module Terminal initialisé avec succès")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Erreur initialisation Terminal: {e}")
             return False
@@ -74,76 +73,83 @@ class TerminalInput(InputModule):
     
     async def _terminal_loop(self) -> None:
         """Boucle principale d'écoute terminal"""
+        print(f"\n=== Terminal GLaDOS démarré ===")
+        print(f"Commandes disponibles: help, test, exit")
+        print(f"Tapez une commande après le prompt:\n")
+
         try:
             while self.is_active:
                 try:
-                    # Utiliser l'executor pour éviter de bloquer
+                    # Afficher le prompt et attendre l'entrée
+                    print(self.prompt, end='', flush=True)
+
+                    # Utiliser run_in_executor avec input() standard
                     loop = asyncio.get_event_loop()
-                    user_input = await loop.run_in_executor(
-                        self.executor, 
-                        self._get_input
-                    )
-                    
-                    if user_input is None:  # EOF ou interruption
-                        break
-                    
+                    user_input = await loop.run_in_executor(None, input)
+
                     user_input = user_input.strip()
-                    
+                    print(f"[DEBUG] Entrée reçue: '{user_input}'")
+
                     if not user_input:
                         continue
-                    
+
                     # Commandes spéciales
                     if user_input.lower() in ['exit', 'quit', 'q']:
                         print("Au revoir!")
-                        await self.emit_event(GLaDOSEvent(
-                            'terminal_exit_requested',
-                            source=self.name
-                        ))
+                        self.is_active = False
                         break
-                    
+
                     elif user_input.lower() in ['help', '?']:
-                        await self._show_help()
+                        print("=== Aide GLaDOS ===")
+                        print("test - Test du terminal")
+                        print("help - Afficher cette aide")
+                        print("exit - Quitter GLaDOS")
+                        print("==================")
                         continue
-                    
-                    elif user_input.lower() == 'history':
-                        await self._show_history()
+
+                    elif user_input.lower() == 'test':
+                        print("✓ Test réussi - Le terminal fonctionne correctement!")
                         continue
-                    
+
                     elif user_input.lower() == 'clear':
-                        self._clear_screen()
+                        import os
+                        os.system('cls' if os.name == 'nt' else 'clear')
                         continue
-                    
+
                     # Ajouter à l'historique
                     self._add_to_history(user_input)
-                    
+
                     # Traiter comme message normal
+                    print(f"[DEBUG] Envoi vers GLaDOS: '{user_input}'")
                     await self._process_input(user_input)
-                    
-                except KeyboardInterrupt:
-                    print("\n\nInterruption détectée. Tapez 'exit' pour quitter.")
-                    continue
-                except EOFError:
-                    print("\nEOF détecté. Arrêt du terminal.")
+                    print(f"[DEBUG] Message envoyé")
+
+                except (EOFError, KeyboardInterrupt):
+                    print("\nArrêt demandé...")
+                    self.is_active = False
                     break
                 except Exception as e:
+                    print(f"Erreur: {e}")
                     self.logger.error(f"Erreur dans la boucle terminal: {e}")
                     continue
-                    
+
         except asyncio.CancelledError:
             self.logger.info("Boucle terminal annulée")
         except Exception as e:
             self.logger.error(f"Erreur fatale dans le terminal: {e}")
+
+        print("Terminal fermé.")
     
     def _get_input(self) -> str:
-        """Récupère l'entrée utilisateur (méthode synchrone)"""
-        try:
-            return input(self.prompt)
-        except (EOFError, KeyboardInterrupt):
-            return None
+        """Récupère l'entrée utilisateur (méthode synchrone) - DEPRECATED"""
+        # Cette méthode n'est plus utilisée depuis la refactorisation
+        pass
     
     async def _process_input(self, user_input: str) -> None:
         """Traite l'entrée utilisateur comme message GLaDOS"""
         try:
+            self.logger.info(f"Traitement de l'entrée: '{user_input}'")
+
             message = GLaDOSMessage(
                 content=user_input,
                 message_type=MessageType.TEXT,
@@ -153,17 +159,20 @@ class TerminalInput(InputModule):
                     "timestamp": asyncio.get_event_loop().time()
                 }
             )
-            
+
+            self.logger.info(f"Émission du message avec {len(self._message_handlers)} handlers")
             await self.emit_message(message)
-            
+
             await self.emit_event(GLaDOSEvent(
                 'terminal_message_sent',
                 data={'text': user_input},
                 source=self.name
             ))
-            
+
         except Exception as e:
             self.logger.error(f"Erreur traitement entrée terminal: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def _add_to_history(self, command: str) -> None:
         """Ajoute une commande à l'historique"""
@@ -219,9 +228,4 @@ Tapez simplement vos questions ou commandes après le prompt '{self.prompt}'
     async def cleanup(self) -> None:
         """Nettoie les ressources"""
         await self.stop_listening()
-        
-        if self.executor:
-            self.executor.shutdown(wait=True)
-            self.executor = None
-        
         self.logger.info("Module Terminal nettoyé")

@@ -9,7 +9,11 @@
       "Bash(mkdir:*)",
       "Bash(git add:*)",
       "Bash(python:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(pip install:*)",
+      "Bash(timeout:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.llamaindex.ai)"
     ],
     "deny": [],
     "ask": []
