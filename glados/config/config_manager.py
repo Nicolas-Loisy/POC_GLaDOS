@@ -17,6 +17,7 @@ class InputConfig:
     """Configuration pour les modules d'entrée"""
     enabled: bool = True
     wake_word: Optional[Dict[str, Any]] = None
+    web: Optional[Dict[str, Any]] = None
     discord: Optional[Dict[str, Any]] = None
     terminal: Optional[Dict[str, Any]] = None
 
@@ -119,6 +120,7 @@ class ConfigManager:
         inputs = InputConfig(
             enabled=inputs_config.get('enabled', True),
             wake_word=inputs_config.get('wake_word'),
+            web=inputs_config.get('web'),
             discord=inputs_config.get('discord'),
             terminal=inputs_config.get('terminal')
         )

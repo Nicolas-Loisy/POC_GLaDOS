@@ -8,6 +8,7 @@ GLaDOS est un assistant vocal modulaire qui peut être contrôlé par wake word,
 
 ### Modules d'Entrée (Input)
 - **Wake Word + STT** : Détection de wake word avec Porcupine et reconnaissance vocale avec Vosk
+- **Interface Web** : Interface web locale avec FastAPI et WebSockets
 - **Terminal** : Interface en ligne de commande interactive
 - **Discord** : Bot Discord (prévu)
 
@@ -113,6 +114,12 @@ glados
    - Parlez votre commande après le signal
    - GLaDOS répond vocalement
 
+3. **Interface Web** :
+   - Ouvrez http://127.0.0.1:8080 dans votre navigateur
+   - Interface moderne avec chat en temps réel
+   - Actions rapides pour commandes fréquentes
+   - Communication WebSocket bidirectionnelle
+
 ### Exemples de commandes
 
 ```bash
@@ -139,6 +146,7 @@ POC_GLaDOS/
 │   ├── config/            # Gestion configuration  
 │   ├── inputs/            # Modules d'entrée
 │   │   ├── wake_word/     # Wake word + STT
+│   │   ├── web/           # Interface web FastAPI
 │   │   ├── terminal/      # Interface terminal
 │   │   └── discord/       # Bot Discord (futur)
 │   ├── outputs/           # Modules de sortie
@@ -175,6 +183,10 @@ inputs:
     enabled: true
     stt:
       device_id: 1
+  web:
+    enabled: true
+    host: "127.0.0.1"
+    port: 8080
   terminal:
     enabled: true
 

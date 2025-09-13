@@ -27,6 +27,14 @@ inputs:
       silence_threshold: 500
       min_silence_duration: 1.0
   
+  # Interface Web locale
+  web:
+    enabled: true
+    host: "127.0.0.1"     # Interface locale seulement
+    port: 8080
+    title: "GLaDOS Assistant Web Interface"
+    enable_cors: true     # Pour le développement
+  
   # Discord Bot
   discord:
     enabled: false

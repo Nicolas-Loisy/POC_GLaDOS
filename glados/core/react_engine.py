@@ -212,6 +212,17 @@ Outils disponibles :
                 self.logger.info("Module Terminal initialisé")
             except Exception as e:
                 self.logger.error(f"Erreur initialisation Terminal: {e}")
+        
+        # Web Interface
+        if hasattr(inputs_config, 'web') and inputs_config.web and inputs_config.web.get('enabled', False):
+            try:
+                module = InputModuleFactory.create('web', 'web', inputs_config.web)
+                await module.initialize()
+                module.subscribe_to_messages(self._handle_input_message)
+                self.input_modules['web'] = module
+                self.logger.info("Module Web Interface initialisé")
+            except Exception as e:
+                self.logger.error(f"Erreur initialisation Web Interface: {e}")
     
     async def _initialize_output_modules(self) -> None:
         """Initialise les modules de sortie"""
@@ -301,6 +312,18 @@ Outils disponibles :
         
         elif original_source == "terminal":
             # Pour le terminal, utiliser la sortie terminal
+            if "terminal_output" in self.output_modules:
+                output_modules_to_use.append(self.output_modules["terminal_output"])
+        
+        elif original_source == "web":
+            # Pour l'interface web, envoyer vers web et terminal
+            if "web" in self.input_modules:
+                # Envoyer la réponse vers l'interface web
+                try:
+                    await self.input_modules["web"].send_response_to_web(message.content)
+                except Exception as e:
+                    self.logger.error(f"Erreur envoi réponse web: {e}")
+            
             if "terminal_output" in self.output_modules:
                 output_modules_to_use.append(self.output_modules["terminal_output"])
         
