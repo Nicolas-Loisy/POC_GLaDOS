@@ -29,16 +29,16 @@ class TerminalOutput(OutputModule):
         
         # Couleurs ANSI
         self.colors = {
-            'green': '\\033[92m',
-            'blue': '\\033[94m',
-            'red': '\\033[91m',
-            'yellow': '\\033[93m',
-            'magenta': '\\033[95m',
-            'cyan': '\\033[96m',
-            'white': '\\033[97m',
-            'reset': '\\033[0m',
-            'bold': '\\033[1m',
-            'dim': '\\033[2m'
+            'green': '\033[92m',
+            'blue': '\033[94m',
+            'red': '\033[91m',
+            'yellow': '\033[93m',
+            'magenta': '\033[95m',
+            'cyan': '\033[96m',
+            'white': '\033[97m',
+            'reset': '\033[0m',
+            'bold': '\033[1m',
+            'dim': '\033[2m'
         }
         
         # Couleurs selon le type de message

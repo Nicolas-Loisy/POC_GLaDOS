@@ -50,9 +50,9 @@ class TerminalInput(InputModule):
         
         try:
             self.logger.info("Démarrage de l'interface terminal...")
-            print(f"\\n=== GLaDOS Assistant Vocal ===")
+            print(f"\n=== GLaDOS Assistant Vocal ===")
             print(f"Tapez 'exit' ou 'quit' pour quitter")
-            print(f"Tapez 'help' pour voir les commandes disponibles\\n")
+            print(f"Tapez 'help' pour voir les commandes disponibles\n")
             
             self.listening_task = asyncio.create_task(self._terminal_loop())
             await self.emit_event(GLaDOSEvent('terminal_listening_started', source=self.name))
@@ -120,10 +120,10 @@ class TerminalInput(InputModule):
                     await self._process_input(user_input)
                     
                 except KeyboardInterrupt:
-                    print("\\n\\nInterruption détectée. Tapez 'exit' pour quitter.")
+                    print("\n\nInterruption détectée. Tapez 'exit' pour quitter.")
                     continue
                 except EOFError:
-                    print("\\nEOF détecté. Arrêt du terminal.")
+                    print("\nEOF détecté. Arrêt du terminal.")
                     break
                 except Exception as e:
                     self.logger.error(f"Erreur dans la boucle terminal: {e}")
@@ -175,7 +175,7 @@ class TerminalInput(InputModule):
     
     async def _show_help(self) -> None:
         """Affiche l'aide des commandes"""
-        help_text = f\"\"\"
+        help_text = f"""
 === Commandes GLaDOS Terminal ===
 
 Commandes système:
@@ -191,7 +191,7 @@ Exemples d'interactions:
   "Raconte-moi une blague"
 
 Tapez simplement vos questions ou commandes après le prompt '{self.prompt}'
-\"\"\"
+"""
         print(help_text)
     
     async def _show_history(self) -> None:
@@ -200,7 +200,7 @@ Tapez simplement vos questions ou commandes après le prompt '{self.prompt}'
             print("Aucune commande dans l'historique.")
             return
         
-        print("\\n=== Historique des commandes ===")
+        print("\n=== Historique des commandes ===")
         for i, cmd in enumerate(self.history[-10:], 1):  # 10 dernières commandes
             print(f"{i:2d}. {cmd}")
         

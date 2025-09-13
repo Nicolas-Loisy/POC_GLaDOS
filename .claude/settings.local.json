@@ -7,7 +7,8 @@
       "Read(E:\\Nicolas\\Workspace\\MarkIO\\Scripts\\IR_OSRAM/**)",
       "Bash(git checkout:*)",
       "Bash(mkdir:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
