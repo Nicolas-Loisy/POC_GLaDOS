@@ -4,28 +4,41 @@ Basé sur les scripts existants dans MarkIO/Scripts/BT_TAPO
 """
 
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from tapo import ApiClient
 import logging
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator, Discriminator
 from enum import Enum
 
 from ...core.interfaces import ToolAdapter
 from ...config.config_manager import ConfigManager
 
 
+class TapoDeviceType(str, Enum):
+    """Types d'appareils TAPO supportés"""
+    P110 = "P110"  # Prise intelligente
+    L530 = "L530"  # Ampoule couleur
+
+
 class TapoAction(str, Enum):
     """Actions disponibles pour les appareils TAPO"""
     ON = "on"
     OFF = "off"
-    SET_BRIGHTNESS = "set_brightness"
-    SET_COLOR = "set_color"
+    TOGGLE = "toggle"
+    GET_INFO = "get_info"
+    SET_BRIGHTNESS = "set_brightness"  # L530 seulement
+    SET_COLOR = "set_color"  # L530 seulement
 
 
-class TapoDeviceName(str, Enum):
-    """Noms des appareils TAPO disponibles"""
-    LAMPE_CHAMBRE = "lampe_chambre"
-    PRISE_CHAMBRE = "prise_chambre"
+# Actions autorisées par type d'appareil
+DEVICE_ACTIONS = {
+    TapoDeviceType.P110: [TapoAction.ON, TapoAction.OFF, TapoAction.TOGGLE, TapoAction.GET_INFO],
+    TapoDeviceType.L530: [TapoAction.ON, TapoAction.OFF, TapoAction.TOGGLE, TapoAction.GET_INFO,
+                          TapoAction.SET_BRIGHTNESS, TapoAction.SET_COLOR]
+}
+
+# Mappage dynamique des appareils vers leur type (rempli depuis la config)
+DEVICE_TYPE_MAPPING: Dict[str, TapoDeviceType] = {}
 
 
 # Dictionnaire des couleurs supportées (noms anglais → RGB)
@@ -51,65 +64,162 @@ TAPO_COLORS = {
 }
 
 
-class TapoUnifiedParameters(BaseModel):
-    """Paramètres unifiés pour tous les appareils TAPO selon bt_tapo_strict_2.py"""
-    device_name: TapoDeviceName = Field(
-        description="Nom exact de l'appareil TAPO à contrôler"
+# Modèles Pydantic spécifiques par action
+class TapoBaseParameters(BaseModel):
+    """Paramètres de base pour toutes les actions TAPO"""
+    device_name: str = Field(
+        description="Nom exact de l'appareil TAPO à contrôler (défini dans la configuration)"
     )
-    action: TapoAction = Field(
-        description="Action à effectuer sur l'appareil"
-    )
-    # Pour set_brightness - utilise 'value' comme dans le script original
-    value: Optional[int] = Field(
-        default=None,
+
+    @model_validator(mode='after')
+    def validate_device_exists(self):
+        """Valide que l'appareil existe dans la configuration"""
+        if self.device_name not in DEVICE_TYPE_MAPPING:
+            available_devices = list(DEVICE_TYPE_MAPPING.keys())
+            raise ValueError(
+                f"Appareil '{self.device_name}' non configuré. "
+                f"Appareils disponibles: {available_devices}"
+            )
+        return self
+
+
+class TapoOnParameters(TapoBaseParameters):
+    """Paramètres pour l'action ON"""
+    action: TapoAction = Field(default=TapoAction.ON, description="Allumer l'appareil")
+
+
+class TapoOffParameters(TapoBaseParameters):
+    """Paramètres pour l'action OFF"""
+    action: TapoAction = Field(default=TapoAction.OFF, description="Éteindre l'appareil")
+
+
+class TapoToggleParameters(TapoBaseParameters):
+    """Paramètres pour l'action TOGGLE"""
+    action: TapoAction = Field(default=TapoAction.TOGGLE, description="Basculer l'état de l'appareil")
+
+
+class TapoGetInfoParameters(TapoBaseParameters):
+    """Paramètres pour l'action GET_INFO"""
+    action: TapoAction = Field(default=TapoAction.GET_INFO, description="Obtenir les informations de l'appareil")
+
+
+class TapoSetBrightnessParameters(TapoBaseParameters):
+    """Paramètres pour l'action SET_BRIGHTNESS (L530 seulement)"""
+    action: TapoAction = Field(default=TapoAction.SET_BRIGHTNESS, description="Régler la luminosité")
+    value: int = Field(
         ge=0,
         le=100,
-        description="Valeur de luminosité de 0 à 100 (OBLIGATOIRE pour set_brightness)"
-    )
-    # Pour set_color - utilise r,g,b comme dans le script original
-    r: Optional[int] = Field(
-        default=None,
-        ge=0,
-        le=255,
-        description="Rouge de 0 à 255 (OBLIGATOIRE pour set_color)"
-    )
-    g: Optional[int] = Field(
-        default=None,
-        ge=0,
-        le=255,
-        description="Vert de 0 à 255 (OBLIGATOIRE pour set_color)"
-    )
-    b: Optional[int] = Field(
-        default=None,
-        ge=0,
-        le=255,
-        description="Bleu de 0 à 255 (OBLIGATOIRE pour set_color)"
-    )
-    # Paramètre alternatif: couleur par nom (sera converti en RGB)
-    color: Optional[str] = Field(
-        default=None,
-        description=f"Nom de couleur en anglais: {', '.join(TAPO_COLORS.keys())} (alternatif à r,g,b)"
+        description="Valeur de luminosité de 0 à 100"
     )
 
-    def model_validate(self):
-        """Validation conditionnelle selon l'action"""
-        if self.action == TapoAction.SET_BRIGHTNESS:
-            if self.value is None:
-                raise ValueError("Paramètre 'value' obligatoire pour l'action 'set_brightness'")
-
-        if self.action == TapoAction.SET_COLOR:
-            # Soit r,g,b soit color obligatoire
-            has_rgb = self.r is not None and self.g is not None and self.b is not None
-            has_color = self.color is not None
-
-            if not has_rgb and not has_color:
-                raise ValueError("Pour 'set_color': soit r,g,b soit 'color' est obligatoire")
-
-            if has_color and self.color not in TAPO_COLORS:
-                available = ", ".join(TAPO_COLORS.keys())
-                raise ValueError(f"Couleur '{self.color}' non supportée. Disponibles: {available}")
-
+    @model_validator(mode='after')
+    def validate_device_supports_brightness(self):
+        """Valide que l'appareil supporte le réglage de luminosité"""
+        super().validate_device_exists()
+        device_type = DEVICE_TYPE_MAPPING.get(self.device_name)
+        if device_type and TapoAction.SET_BRIGHTNESS not in DEVICE_ACTIONS[device_type]:
+            supported = [action.value for action in DEVICE_ACTIONS[device_type]]
+            raise ValueError(
+                f"Action 'set_brightness' non supportée pour {self.device_name} "
+                f"(type {device_type.value}). Actions supportées: {supported}"
+            )
         return self
+
+
+class TapoSetColorRGBParameters(TapoBaseParameters):
+    """Paramètres pour l'action SET_COLOR avec valeurs RGB (L530 seulement)"""
+    action: TapoAction = Field(default=TapoAction.SET_COLOR, description="Changer la couleur")
+    r: int = Field(ge=0, le=255, description="Rouge de 0 à 255")
+    g: int = Field(ge=0, le=255, description="Vert de 0 à 255")
+    b: int = Field(ge=0, le=255, description="Bleu de 0 à 255")
+
+    @model_validator(mode='after')
+    def validate_device_supports_color(self):
+        """Valide que l'appareil supporte le changement de couleur"""
+        super().validate_device_exists()
+        device_type = DEVICE_TYPE_MAPPING.get(self.device_name)
+        if device_type and TapoAction.SET_COLOR not in DEVICE_ACTIONS[device_type]:
+            supported = [action.value for action in DEVICE_ACTIONS[device_type]]
+            raise ValueError(
+                f"Action 'set_color' non supportée pour {self.device_name} "
+                f"(type {device_type.value}). Actions supportées: {supported}"
+            )
+        return self
+
+
+class TapoSetColorNamedParameters(TapoBaseParameters):
+    """Paramètres pour l'action SET_COLOR avec couleur nommée (L530 seulement)"""
+    action: TapoAction = Field(default=TapoAction.SET_COLOR, description="Changer la couleur")
+    color: str = Field(
+        description=f"Nom de couleur: {', '.join(TAPO_COLORS.keys())}"
+    )
+
+    @model_validator(mode='after')
+    def validate_color_and_device(self):
+        """Valide la couleur et que l'appareil supporte le changement de couleur"""
+        super().validate_device_exists()
+
+        # Valider la couleur
+        if self.color not in TAPO_COLORS:
+            available = ", ".join(TAPO_COLORS.keys())
+            raise ValueError(f"Couleur '{self.color}' non supportée. Disponibles: {available}")
+
+        # Valider que l'appareil supporte les couleurs
+        device_type = DEVICE_TYPE_MAPPING.get(self.device_name)
+        if device_type and TapoAction.SET_COLOR not in DEVICE_ACTIONS[device_type]:
+            supported = [action.value for action in DEVICE_ACTIONS[device_type]]
+            raise ValueError(
+                f"Action 'set_color' non supportée pour {self.device_name} "
+                f"(type {device_type.value}). Actions supportées: {supported}"
+            )
+        return self
+
+
+# Union discriminé basé sur le champ 'action' pour validation optimisée
+def get_discriminator_value(v: Any) -> str:
+    """Fonction discriminatrice pour identifier le bon modèle selon l'action"""
+    if isinstance(v, dict):
+        action = v.get('action')
+        if action == 'on':
+            return 'on'
+        elif action == 'off':
+            return 'off'
+        elif action == 'toggle':
+            return 'toggle'
+        elif action == 'get_info':
+            return 'get_info'
+        elif action == 'set_brightness':
+            return 'set_brightness'
+        elif action == 'set_color':
+            # Distinguer entre RGB et couleur nommée
+            if 'color' in v and v['color'] is not None:
+                return 'set_color_named'
+            else:
+                return 'set_color_rgb'
+    return 'on'  # default
+
+
+TapoUnifiedParameters = Union[
+    TapoOnParameters,
+    TapoOffParameters,
+    TapoToggleParameters,
+    TapoGetInfoParameters,
+    TapoSetBrightnessParameters,
+    TapoSetColorRGBParameters,
+    TapoSetColorNamedParameters
+]
+
+# Modèle général pour LlamaIndex (tous paramètres optionnels sauf les obligatoires)
+class TapoGeneralParameters(BaseModel):
+    """Modèle général pour LlamaIndex avec tous les paramètres possibles"""
+    device_name: str = Field(description="Nom exact de l'appareil TAPO à contrôler")
+    action: TapoAction = Field(description="Action à effectuer sur l'appareil")
+    # Paramètres optionnels selon l'action
+    value: Optional[int] = Field(default=None, ge=0, le=100, description="Luminosité 0-100 (pour set_brightness)")
+    r: Optional[int] = Field(default=None, ge=0, le=255, description="Rouge 0-255 (pour set_color)")
+    g: Optional[int] = Field(default=None, ge=0, le=255, description="Vert 0-255 (pour set_color)")
+    b: Optional[int] = Field(default=None, ge=0, le=255, description="Bleu 0-255 (pour set_color)")
+    color: Optional[str] = Field(default=None, description=f"Couleur par nom: {', '.join(TAPO_COLORS.keys())} (pour set_color)")
 
 # Alias pour compatibilité
 TapoParameters = TapoUnifiedParameters
@@ -136,12 +246,36 @@ class TapoAdapter(ToolAdapter):
         if not self.email or not self.password:
             raise ValueError("Email et mot de passe Tapo requis")
 
+        # Mettre à jour le mappage des types d'appareils selon la configuration
+        self._update_device_type_mapping()
+
         # Construire la description dynamiquement avec la liste des appareils
         self._build_description()
 
+    def _update_device_type_mapping(self) -> None:
+        """Met à jour le mappage global des types d'appareils selon la config"""
+        global DEVICE_TYPE_MAPPING
+
+        # Réinitialiser le mappage
+        DEVICE_TYPE_MAPPING.clear()
+
+        # Construire le mappage depuis la configuration
+        for device_id, device_config in self.devices.items():
+            device_type_str = device_config.get('type', '').upper()
+            try:
+                device_type = TapoDeviceType(device_type_str)
+                DEVICE_TYPE_MAPPING[device_id] = device_type
+                self.logger.debug(f"Mappage ajouté: {device_id} -> {device_type.value}")
+            except ValueError:
+                self.logger.warning(f"Type d'appareil '{device_type_str}' non supporté pour {device_id}")
+
+        self.logger.info(f"Mappage des appareils TAPO: {dict(DEVICE_TYPE_MAPPING)}")
+
     def get_pydantic_schema(self):
         """Retourne le schéma Pydantic pour les paramètres de l'outil"""
-        return TapoUnifiedParameters
+        # Retourner le modèle général qui peut être utilisé par LlamaIndex
+        # La validation stricte se fera dans execute() avec les modèles spécifiques
+        return TapoGeneralParameters
 
     def _build_description(self) -> None:
         """Construit la description avec la liste des appareils disponibles"""
@@ -164,29 +298,50 @@ class TapoAdapter(ToolAdapter):
         Exécute une action sur un appareil Tapo avec validation Pydantic
         """
         try:
-            # Validation stricte avec le modèle unifié
-            params = TapoUnifiedParameters(**kwargs)
-            params.model_validate()  # Validation conditionnelle
+            # Validation stricte avec le modèle unifié basé sur l'action
+            # Le modèle correct sera automatiquement sélectionné selon l'action
+            if 'action' not in kwargs:
+                raise ValueError("Paramètre 'action' obligatoire")
 
-            device_name = params.device_name.value
-            action = params.action.value
+            action_value = kwargs['action']
+            device_name = kwargs.get('device_name')
 
-            # Convertir couleur par nom en RGB si nécessaire
-            if action == "set_color" and params.color:
-                r, g, b = TAPO_COLORS[params.color]
-                params.r, params.g, params.b = r, g, b
+            # Créer le bon modèle selon l'action
+            if action_value == 'on':
+                params = TapoOnParameters(**kwargs)
+            elif action_value == 'off':
+                params = TapoOffParameters(**kwargs)
+            elif action_value == 'toggle':
+                params = TapoToggleParameters(**kwargs)
+            elif action_value == 'get_info':
+                params = TapoGetInfoParameters(**kwargs)
+            elif action_value == 'set_brightness':
+                params = TapoSetBrightnessParameters(**kwargs)
+            elif action_value == 'set_color':
+                # Distinguer RGB vs couleur nommée
+                if 'color' in kwargs and kwargs['color'] is not None:
+                    params = TapoSetColorNamedParameters(**kwargs)
+                    # Convertir couleur nommée en RGB pour l'exécution
+                    r, g, b = TAPO_COLORS[params.color]
+                    # Créer un objet temporaire avec RGB pour l'exécution
+                    class TempParams:
+                        def __init__(self, base_params, r, g, b):
+                            self.device_name = base_params.device_name
+                            self.action = base_params.action
+                            self.r, self.g, self.b = r, g, b
+                    params = TempParams(params, r, g, b)
+                else:
+                    params = TapoSetColorRGBParameters(**kwargs)
+            else:
+                raise ValueError(f"Action '{action_value}' non reconnue")
+
+            action = action_value
             
-            if not device_name:
-                return {
-                    "success": False, 
-                    "error": "Nom de l'appareil requis",
-                    "available_devices": list(self.devices.keys())
-                }
-            
-            if device_name not in self.devices:
+            # Vérification déjà faite par la validation Pydantic, mais double sécurité
+            if not device_name or device_name not in self.devices:
                 return {
                     "success": False,
-                    "error": f"Appareil '{device_name}' non trouvé",
+                    "error": f"Appareil '{device_name}' introuvable",
                     "available_devices": list(self.devices.keys())
                 }
             
@@ -245,7 +400,7 @@ class TapoAdapter(ToolAdapter):
                 # Obtenir l'état actuel et basculer
                 info = await device.get_device_info()
                 is_on = info.device_on if hasattr(info, 'device_on') else False
-                
+
                 if is_on:
                     await device.off()
                     return {"success": True, "action": "éteint (basculé)"}
@@ -299,10 +454,11 @@ class TapoAdapter(ToolAdapter):
                 }
             
             else:
+                # Cette erreur ne devrait jamais arriver grâce à la validation Pydantic
                 return {
                     "success": False,
                     "error": f"Action non supportée: {action}",
-                    "supported_actions": ["on", "off", "toggle", "set_brightness", "set_color", "get_info"]
+                    "supported_actions": [action.value for action in TapoAction]
                 }
                 
         except Exception as e:
@@ -381,71 +537,133 @@ class TapoAdapter(ToolAdapter):
         saturation = 0 if max_val == 0 else (diff / max_val) * 100
         
         return int(hue), int(saturation)
+
+    def _rgb_to_hue_sat(self, r: int, g: int, b: int) -> tuple:
+        """Convertit RGB (0-255) vers hue/saturation pour l'API Tapo"""
+        # Normaliser les valeurs RGB (0-1)
+        r_norm = r / 255.0
+        g_norm = g / 255.0
+        b_norm = b / 255.0
+
+        max_val = max(r_norm, g_norm, b_norm)
+        min_val = min(r_norm, g_norm, b_norm)
+        diff = max_val - min_val
+
+        # Calcul de la teinte (hue)
+        if diff == 0:
+            hue = 0
+        elif max_val == r_norm:
+            hue = (60 * ((g_norm - b_norm) / diff) + 360) % 360
+        elif max_val == g_norm:
+            hue = (60 * ((b_norm - r_norm) / diff) + 120) % 360
+        else:
+            hue = (60 * ((r_norm - g_norm) / diff) + 240) % 360
+
+        # Calcul de la saturation
+        saturation = 0 if max_val == 0 else (diff / max_val) * 100
+
+        return int(hue), int(saturation)
     
     def get_parameters_schema(self) -> Dict[str, Any]:
-        """Schéma des paramètres pour OpenAI function calling"""
+        """Schéma des paramètres pour OpenAI function calling avec paramètres conditionnels"""
+        # Construire les enums dynamiquement depuis la configuration
+        device_names = list(self.devices.keys()) if self.devices else []
+        actions = [action.value for action in TapoAction]
+
         return {
             "type": "function",
             "function": {
                 "name": "control_tapo_device",
-                "description": "Contrôle les appareils Tapo (prises et ampoules intelligentes)",
+                "description": "Contrôle les appareils Tapo avec paramètres conditionnels selon l'action",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "device_name": {
                             "type": "string",
-                            "description": "Nom de l'appareil Tapo",
-                            "enum": list(self.devices.keys())
+                            "description": "Nom exact de l'appareil TAPO à contrôler",
+                            "enum": device_names
                         },
                         "action": {
                             "type": "string",
                             "description": "Action à effectuer",
-                            "enum": ["on", "off", "toggle", "set_brightness", "set_color", "get_info"]
-                        },
-                        "brightness": {
-                            "type": "integer",
-                            "description": "Luminosité (1-100) pour les ampoules",
-                            "minimum": 1,
-                            "maximum": 100
-                        },
-                        "color": {
-                            "type": "string",
-                            "description": "Couleur (rouge, vert, bleu, jaune, etc.) ou hex (#FF0000)"
-                        },
-                        "hue": {
-                            "type": "integer",
-                            "description": "Teinte (0-360)",
-                            "minimum": 0,
-                            "maximum": 360
-                        },
-                        "saturation": {
-                            "type": "integer", 
-                            "description": "Saturation (0-100)",
-                            "minimum": 0,
-                            "maximum": 100
+                            "enum": actions
                         }
                     },
-                    "required": ["device_name", "action"]
+                    "required": ["device_name", "action"],
+                    "allOf": [
+                        {
+                            "if": {"properties": {"action": {"const": "set_brightness"}}},
+                            "then": {
+                                "properties": {
+                                    "value": {
+                                        "type": "integer",
+                                        "description": "Luminosité 0-100 (OBLIGATOIRE pour set_brightness)",
+                                        "minimum": 0,
+                                        "maximum": 100
+                                    }
+                                },
+                                "required": ["device_name", "action", "value"],
+                                "additionalProperties": False
+                            }
+                        },
+                        {
+                            "if": {"properties": {"action": {"const": "set_color"}}},
+                            "then": {
+                                "oneOf": [
+                                    {
+                                        "properties": {
+                                            "device_name": {"type": "string"},
+                                            "action": {"const": "set_color"},
+                                            "r": {"type": "integer", "minimum": 0, "maximum": 255, "description": "Rouge 0-255"},
+                                            "g": {"type": "integer", "minimum": 0, "maximum": 255, "description": "Vert 0-255"},
+                                            "b": {"type": "integer", "minimum": 0, "maximum": 255, "description": "Bleu 0-255"}
+                                        },
+                                        "required": ["device_name", "action", "r", "g", "b"],
+                                        "additionalProperties": False
+                                    },
+                                    {
+                                        "properties": {
+                                            "device_name": {"type": "string"},
+                                            "action": {"const": "set_color"},
+                                            "color": {
+                                                "type": "string",
+                                                "description": f"Couleur par nom: {', '.join(TAPO_COLORS.keys())}",
+                                                "enum": list(TAPO_COLORS.keys())
+                                            }
+                                        },
+                                        "required": ["device_name", "action", "color"],
+                                        "additionalProperties": False
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "if": {
+                                "properties": {
+                                    "action": {
+                                        "enum": ["on", "off", "toggle", "get_info"]
+                                    }
+                                }
+                            },
+                            "then": {
+                                "properties": {
+                                    "device_name": {"type": "string"},
+                                    "action": {"type": "string"}
+                                },
+                                "required": ["device_name", "action"],
+                                "additionalProperties": False
+                            }
+                        }
+                    ]
                 }
             }
         }
     
     async def validate_parameters(self, **kwargs) -> bool:
-        """Valide les paramètres avant exécution"""
-        device_name = kwargs.get('device_name')
-        action = kwargs.get('action', '').lower()
-        
-        if not device_name or device_name not in self.devices:
+        """Valide les paramètres avec le modèle Pydantic strict"""
+        try:
+            # Utiliser la validation Pydantic stricte
+            TapoUnifiedParameters(**kwargs)
+            return True
+        except Exception:
             return False
-        
-        valid_actions = ["on", "off", "toggle", "set_brightness", "set_color", "get_info"]
-        if action not in valid_actions:
-            return False
-        
-        # Validation spécifique pour set_brightness
-        if action == "set_brightness":
-            brightness = kwargs.get('brightness')
-            if brightness is not None and not (1 <= brightness <= 100):
-                return False
-        
-        return True
