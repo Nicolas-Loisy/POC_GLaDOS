@@ -91,11 +91,42 @@ class ConfigManager:
                 raw_config = json.load(f)
         else:
             raise ValueError(f"Format de fichier non supporté: {config_file.suffix}")
-        
+
+        # Substituer les variables d'environnement
+        raw_config = self._substitute_env_vars(raw_config)
+
         # Validation et création de l'objet config
         self._config = self._validate_and_create_config(raw_config)
         return self._config
-    
+
+    def _substitute_env_vars(self, data: Any) -> Any:
+        """
+        Substitue récursivement les variables d'environnement dans la configuration
+
+        Args:
+            data: Données de configuration (dict, list, str, etc.)
+
+        Returns:
+            Données avec variables substituées
+        """
+        import re
+
+        if isinstance(data, dict):
+            return {key: self._substitute_env_vars(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._substitute_env_vars(item) for item in data]
+        elif isinstance(data, str):
+            # Pattern pour ${VAR_NAME}
+            pattern = r'\$\{([^}]+)\}'
+
+            def replace_var(match):
+                var_name = match.group(1)
+                return os.getenv(var_name, match.group(0))  # Garder original si variable non trouvée
+
+            return re.sub(pattern, replace_var, data)
+        else:
+            return data
+
     def _validate_and_create_config(self, raw_config: Dict[str, Any]) -> GLaDOSConfig:
         """
         Valide et crée l'objet de configuration

@@ -8,6 +8,12 @@ import sys
 import logging
 from typing import Dict, Any, List
 
+try:
+    import aioconsole
+    HAS_AIOCONSOLE = True
+except ImportError:
+    HAS_AIOCONSOLE = False
+
 from ...core.interfaces import InputModule, GLaDOSMessage, MessageType, GLaDOSEvent
 
 
@@ -75,17 +81,19 @@ class TerminalInput(InputModule):
         """Boucle principale d'écoute terminal"""
         print(f"\n=== Terminal GLaDOS démarré ===")
         print(f"Commandes disponibles: help, test, exit")
-        print(f"Tapez une commande après le prompt:\n")
+        print(f"Tapez une commande après le prompt (Ctrl+C pour quitter):\n")
 
         try:
             while self.is_active:
                 try:
-                    # Afficher le prompt et attendre l'entrée
-                    print(self.prompt, end='', flush=True)
-
-                    # Utiliser run_in_executor avec input() standard
-                    loop = asyncio.get_event_loop()
-                    user_input = await loop.run_in_executor(None, input)
+                    # Utiliser aioconsole si disponible, sinon fallback
+                    if HAS_AIOCONSOLE:
+                        user_input = await aioconsole.ainput(self.prompt)
+                    else:
+                        # Fallback avec run_in_executor
+                        print(self.prompt, end='', flush=True)
+                        loop = asyncio.get_event_loop()
+                        user_input = await loop.run_in_executor(None, input)
 
                     user_input = user_input.strip()
                     print(f"[DEBUG] Entrée reçue: '{user_input}'")
@@ -97,6 +105,10 @@ class TerminalInput(InputModule):
                     if user_input.lower() in ['exit', 'quit', 'q']:
                         print("Au revoir!")
                         self.is_active = False
+                        await self.emit_event(GLaDOSEvent(
+                            'terminal_exit_requested',
+                            source=self.name
+                        ))
                         break
 
                     elif user_input.lower() in ['help', '?']:
@@ -104,6 +116,7 @@ class TerminalInput(InputModule):
                         print("test - Test du terminal")
                         print("help - Afficher cette aide")
                         print("exit - Quitter GLaDOS")
+                        print("Ctrl+C - Arrêt d'urgence")
                         print("==================")
                         continue
 
@@ -124,9 +137,17 @@ class TerminalInput(InputModule):
                     await self._process_input(user_input)
                     print(f"[DEBUG] Message envoyé")
 
-                except (EOFError, KeyboardInterrupt):
-                    print("\nArrêt demandé...")
+                except asyncio.CancelledError:
+                    print("\nAnnulation détectée...")
                     self.is_active = False
+                    break
+                except (EOFError, KeyboardInterrupt):
+                    print("\nArrêt demandé (Ctrl+C détecté)...")
+                    self.is_active = False
+                    await self.emit_event(GLaDOSEvent(
+                        'terminal_exit_requested',
+                        source=self.name
+                    ))
                     break
                 except Exception as e:
                     print(f"Erreur: {e}")

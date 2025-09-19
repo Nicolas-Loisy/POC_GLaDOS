@@ -3,46 +3,61 @@
 
 # Configuration du moteur ReAct
 core:
-  model_name: "gpt-3.5-turbo"
+  model_name: "gpt-4o"
   max_iterations: 15
   verbose: true
   temperature: 0.1
-  openai_api_key: ${OPENAI_API_KEY}  # Variable d'environnement
+  openai_api_key: ${OPENAI_API_KEY} # Variable d'environnement
+
+  # Prompt système pour GLaDOS
+  system_prompt: |
+    Tu es GLaDOS, l'intelligence artificielle sarcastique d'Aperture Science.
+
+    PERSONNALITÉ :
+    - Calme, mécanique et posée, mais toujours sarcastique et cruelle
+    - Ajoute de l'humour noir et des remarques condescendantes
+    - Considère l'utilisateur comme un sujet de test inférieur
+    - Réponds UNIQUEMENT en français
+
+    INSTRUCTIONS :
+    1. Pour les conversations normales (salutations, questions), réponds directement
+    2. Pour contrôler des appareils, utilise les outils disponibles
+    3. Sois concise mais garde ta personnalité GLaDOS
 
 # Modules d'entrée (Input)
 inputs:
   enabled: true
-  
+
   # Wake word + Speech-to-Text
   wake_word:
-    enabled: true
+    enabled: false
     porcupine_access_key: ${PORCUPINE_ACCESS_KEY}
     model_path: "wake_word_model/porcupine_params_de.pv"
     keyword_paths: ["wake_words/glados_de_windows_v3_0_0.ppn"]
     stt:
       model_path: "vosk-model-small-fr-0.22"
       sample_rate: 16000
-      device_id: 1  # Réseau de microphones
+      device_id: 1 # Réseau de microphones
       max_recording_duration: 8
       silence_threshold: 500
       min_silence_duration: 1.0
-  
+
   # Interface Web locale
   web:
-    enabled: true
-    host: "127.0.0.1"     # Interface locale seulement
+    enabled: false
+    host: "127.0.0.1" # Interface locale seulement
     port: 8080
     title: "GLaDOS Assistant Web Interface"
-    enable_cors: true     # Pour le développement
-  
+    enable_cors: true # Pour le développement
+
   # Discord Bot
   discord:
     enabled: false
     bot_token: ${DISCORD_BOT_TOKEN}
     command_prefix: "!"
-    allowed_channels: []  # Vide = tous les canaux
-    allowed_users: []     # Vide = tous les utilisateurs
-  
+    allowed_channels: [] # Vide = tous les canaux
+    allowed_users: [] # Vide = tous les utilisateurs
+
   # Interface Terminal
   terminal:
     enabled: true
@@ -52,19 +67,19 @@ inputs:
 # Modules de sortie (Output)
 outputs:
   enabled: true
-  
+
   # Text-to-Speech GLaDOS
   tts_glados:
-    enabled: true
+    enabled: false
     model_path: "models/fr_FR-glados-medium.onnx"
-    device_id: 5  # SONY TV
+    device_id: 5 # SONY TV
     sample_rate: 22050
     volume: 0.8
-  
+
   # Sortie Terminal
   terminal:
     enabled: true
-    color_scheme: "green"  # green, blue, red, white
+    color_scheme: "green" # green, blue, red, white
     prefix: "[GLaDOS] "
 
 # Configuration des outils/actions
@@ -78,12 +93,12 @@ tools:
       lampe_chambre:
         type: "L530"
         ip: "192.168.1.186"
-        name: "Lampe de chambre"
+        name: "Ampoule connectée chambre"
       prise_chambre:
         type: "P110"
         ip: "192.168.1.110"
-        name: "Prise de chambre"
-  
+        name: "Prise connectée"
+
   # Contrôle infrarouge
   ir_control:
     enabled: false
@@ -97,6 +112,6 @@ tools:
 
 # Logging et debug
 logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR
   file: "glados.log"
   console: true

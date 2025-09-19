@@ -7,9 +7,112 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from tapo import ApiClient
 import logging
+from pydantic import BaseModel, Field
+from enum import Enum
 
 from ...core.interfaces import ToolAdapter
 from ...config.config_manager import ConfigManager
+
+
+class TapoAction(str, Enum):
+    """Actions disponibles pour les appareils TAPO"""
+    ON = "on"
+    OFF = "off"
+    SET_BRIGHTNESS = "set_brightness"
+    SET_COLOR = "set_color"
+
+
+class TapoDeviceName(str, Enum):
+    """Noms des appareils TAPO disponibles"""
+    LAMPE_CHAMBRE = "lampe_chambre"
+    PRISE_CHAMBRE = "prise_chambre"
+
+
+# Dictionnaire des couleurs supportées (noms anglais → RGB)
+TAPO_COLORS = {
+    # Couleurs de base
+    "red": (255, 0, 0),
+    "green": (0, 255, 0),
+    "blue": (0, 0, 255),
+    "white": (255, 255, 255),
+    "yellow": (255, 255, 0),
+    "orange": (255, 165, 0),
+    "purple": (128, 0, 128),
+    "pink": (255, 192, 203),
+    "cyan": (0, 255, 255),
+    "magenta": (255, 0, 255),
+    # Couleurs étendues
+    "warm_white": (255, 244, 229),
+    "cool_white": (237, 245, 255),
+    "lime": (50, 205, 50),
+    "navy": (0, 0, 128),
+    "teal": (0, 128, 128),
+    "maroon": (128, 0, 0)
+}
+
+
+class TapoUnifiedParameters(BaseModel):
+    """Paramètres unifiés pour tous les appareils TAPO selon bt_tapo_strict_2.py"""
+    device_name: TapoDeviceName = Field(
+        description="Nom exact de l'appareil TAPO à contrôler"
+    )
+    action: TapoAction = Field(
+        description="Action à effectuer sur l'appareil"
+    )
+    # Pour set_brightness - utilise 'value' comme dans le script original
+    value: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Valeur de luminosité de 0 à 100 (OBLIGATOIRE pour set_brightness)"
+    )
+    # Pour set_color - utilise r,g,b comme dans le script original
+    r: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=255,
+        description="Rouge de 0 à 255 (OBLIGATOIRE pour set_color)"
+    )
+    g: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=255,
+        description="Vert de 0 à 255 (OBLIGATOIRE pour set_color)"
+    )
+    b: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=255,
+        description="Bleu de 0 à 255 (OBLIGATOIRE pour set_color)"
+    )
+    # Paramètre alternatif: couleur par nom (sera converti en RGB)
+    color: Optional[str] = Field(
+        default=None,
+        description=f"Nom de couleur en anglais: {', '.join(TAPO_COLORS.keys())} (alternatif à r,g,b)"
+    )
+
+    def model_validate(self):
+        """Validation conditionnelle selon l'action"""
+        if self.action == TapoAction.SET_BRIGHTNESS:
+            if self.value is None:
+                raise ValueError("Paramètre 'value' obligatoire pour l'action 'set_brightness'")
+
+        if self.action == TapoAction.SET_COLOR:
+            # Soit r,g,b soit color obligatoire
+            has_rgb = self.r is not None and self.g is not None and self.b is not None
+            has_color = self.color is not None
+
+            if not has_rgb and not has_color:
+                raise ValueError("Pour 'set_color': soit r,g,b soit 'color' est obligatoire")
+
+            if has_color and self.color not in TAPO_COLORS:
+                available = ", ".join(TAPO_COLORS.keys())
+                raise ValueError(f"Couleur '{self.color}' non supportée. Disponibles: {available}")
+
+        return self
+
+# Alias pour compatibilité
+TapoParameters = TapoUnifiedParameters
 
 
 class TapoAdapter(ToolAdapter):
@@ -20,7 +123,6 @@ class TapoAdapter(ToolAdapter):
     
     def __init__(self, name: str, config: Dict[str, Any]):
         super().__init__(name, config)
-        self.description = "Contrôle les appareils Tapo (prises, ampoules) - allumer, éteindre, changer couleurs"
         self.logger = logging.getLogger(__name__)
         
         # Configuration Tapo
@@ -33,22 +135,46 @@ class TapoAdapter(ToolAdapter):
         
         if not self.email or not self.password:
             raise ValueError("Email et mot de passe Tapo requis")
-    
+
+        # Construire la description dynamiquement avec la liste des appareils
+        self._build_description()
+
+    def get_pydantic_schema(self):
+        """Retourne le schéma Pydantic pour les paramètres de l'outil"""
+        return TapoUnifiedParameters
+
+    def _build_description(self) -> None:
+        """Construit la description avec la liste des appareils disponibles"""
+        base_description = "Contrôle les appareils Tapo (prises, ampoules) - allumer, éteindre, changer couleurs"
+
+        if self.devices:
+            device_list = []
+            for device_id, device_config in self.devices.items():
+                device_name = device_config.get('name', device_id)
+                device_type = device_config.get('type', 'unknown')
+                device_list.append(f"- {device_id}: {device_name} ({device_type})")
+
+            devices_str = "\n".join(device_list)
+            self.description = f"{base_description}\n\nAppareils disponibles:\n{devices_str}\n\nUtilise le nom exact de l'appareil (ex: 'lampe_chambre', 'prise_chambre')"
+        else:
+            self.description = base_description
+
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """
-        Exécute une action sur un appareil Tapo
-        
-        Paramètres supportés:
-        - device_name: nom de l'appareil (ex: "lampe_chambre")
-        - action: "on", "off", "toggle", "set_brightness", "set_color"
-        - brightness: 1-100 (optionnel)
-        - color: nom de couleur ou hex (optionnel)
-        - hue: 0-360 (optionnel)
-        - saturation: 0-100 (optionnel)
+        Exécute une action sur un appareil Tapo avec validation Pydantic
         """
         try:
-            device_name = kwargs.get('device_name')
-            action = kwargs.get('action', 'toggle').lower()
+            # Validation stricte avec le modèle unifié
+            params = TapoUnifiedParameters(**kwargs)
+            params.model_validate()  # Validation conditionnelle
+
+            device_name = params.device_name.value
+            action = params.action.value
+
+            # Convertir couleur par nom en RGB si nécessaire
+            if action == "set_color" and params.color:
+                r, g, b = TAPO_COLORS[params.color]
+                params.r, params.g, params.b = r, g, b
             
             if not device_name:
                 return {
@@ -71,8 +197,12 @@ class TapoAdapter(ToolAdapter):
             
             # Initialiser le client si nécessaire
             if not self.client:
+                self.logger.info(f"Initialisation client TAPO avec email: {self.email[:3]}***@{self.email.split('@')[1] if '@' in self.email else 'unknown'}")
+                self.logger.info(f"Password length: {len(self.password)} chars")
                 self.client = ApiClient(self.email, self.password)
-            
+
+            self.logger.info(f"Connexion à {device_name} ({device_type}) sur {device_ip}")
+
             # Connecter à l'appareil selon le type
             if device_type.upper() == 'P110':
                 device = await self.client.p110(device_ip)
@@ -84,8 +214,8 @@ class TapoAdapter(ToolAdapter):
                     "error": f"Type d'appareil non supporté: {device_type}"
                 }
             
-            # Exécuter l'action
-            result = await self._execute_action(device, action, device_type, **kwargs)
+            # Passer les paramètres validés à _execute_action
+            result = await self._execute_action(device, action, device_type, params)
             result["device_name"] = device_display_name
             result["device_type"] = device_type
             
@@ -99,7 +229,7 @@ class TapoAdapter(ToolAdapter):
                 "error": str(e)
             }
     
-    async def _execute_action(self, device, action: str, device_type: str, **kwargs) -> Dict[str, Any]:
+    async def _execute_action(self, device, action: str, device_type: str, params: TapoUnifiedParameters) -> Dict[str, Any]:
         """Exécute l'action spécifique sur l'appareil"""
         
         try:
@@ -124,15 +254,36 @@ class TapoAdapter(ToolAdapter):
                     return {"success": True, "action": "allumé (basculé)"}
             
             elif action == "set_brightness" and device_type.upper() == 'L530':
-                brightness = kwargs.get('brightness', 50)
-                if not (1 <= brightness <= 100):
-                    return {"success": False, "error": "Luminosité doit être entre 1 et 100"}
-                
-                await device.set_brightness(brightness)
-                return {"success": True, "action": f"luminosité réglée à {brightness}%"}
-            
+                # Utiliser 'value' comme dans bt_tapo_strict_2.py
+                brightness_value = params.value
+                await device.set_brightness(brightness_value)
+                return {"success": True, "action": f"luminosité réglée à {brightness_value}%"}
+
             elif action == "set_color" and device_type.upper() == 'L530':
-                return await self._set_color(device, **kwargs)
+                # Utiliser r,g,b comme dans bt_tapo_strict_2.py
+                r, g, b = params.r, params.g, params.b
+
+                # Essayer différentes méthodes d'appel selon la version de l'API
+                try:
+                    # Méthode 1: Paramètres séparés (comme bt_tapo_strict_2.py)
+                    await device.set_color(r, g, b)
+                except TypeError as e:
+                    self.logger.info(f"Méthode 1 échouée: {e}, essai méthode 2")
+                    try:
+                        # Méthode 2: Tuple RGB
+                        await device.set_color((r, g, b))
+                    except TypeError as e2:
+                        self.logger.info(f"Méthode 2 échouée: {e2}, essai méthode 3")
+                        try:
+                            # Méthode 3: Dict RGB
+                            await device.set_color({"r": r, "g": g, "b": b})
+                        except TypeError as e3:
+                            self.logger.info(f"Méthode 3 échouée: {e3}, essai avec hue/saturation")
+                            # Méthode 4: Conversion RGB vers HSV
+                            hue, saturation = self._rgb_to_hue_sat(r, g, b)
+                            await device.set_hue_saturation(hue, saturation)
+
+                return {"success": True, "action": f"couleur réglée à RGB({r},{g},{b})"}
             
             elif action == "get_info":
                 info = await device.get_device_info()

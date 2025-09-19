@@ -107,17 +107,75 @@ class GLaDOSReActEngine:
         """
         async def tool_function(**kwargs):
             try:
+                # Log des paramètres bruts reçus
+                self.logger.info(f"🔧 Appel de l'outil '{adapter.name}' avec les paramètres bruts: {kwargs}")
+
+                # Passer directement les kwargs à l'adaptateur
+                # Le schéma Pydantic s'occupera de la validation et extraction
                 result = await adapter.execute(**kwargs)
+                self.logger.info(f"✅ Résultat de l'outil '{adapter.name}': {result}")
                 return result
             except Exception as e:
+                self.logger.error(f"❌ Erreur dans l'outil '{adapter.name}': {str(e)}")
                 return {"error": str(e), "success": False}
-        
+
+        # Récupérer le schéma Pydantic si disponible
+        fn_schema = None
+        if hasattr(adapter, 'get_pydantic_schema'):
+            fn_schema = adapter.get_pydantic_schema()
+
         return FunctionTool.from_defaults(
             fn=tool_function,
             name=adapter.name,
             description=adapter.description,
-            fn_schema=adapter.get_parameters_schema()
+            fn_schema=fn_schema
         )
+
+    def _map_tool_parameters(self, tool_name: str, params: dict) -> dict:
+        """
+        Mappe les paramètres LlamaIndex vers les paramètres attendus par l'adaptateur
+        """
+        if tool_name == 'tapo':
+            # Mapping spécifique pour TAPO
+            mapped = {}
+
+            # Mapper les noms d'appareils
+            device_name = None
+            if 'device_name' in params:
+                device_name = params['device_name']
+            elif 'device' in params:
+                device_name = params['device']
+
+            if device_name:
+                mapped['device_name'] = device_name
+
+            # Mapper les actions/états
+            action = None
+            if 'action' in params:
+                action = params['action']
+            elif 'state' in params:
+                action = params['state']
+
+            if action:
+                mapped['action'] = action
+
+            # Conserver les autres paramètres utiles
+            for key, value in params.items():
+                if key not in ['device', 'device_name', 'state', 'action']:
+                    # Paramètres optionnels pour TAPO
+                    if key in ['brightness', 'color', 'hue', 'saturation']:
+                        mapped[key] = value
+
+            # Valeurs par défaut si manquantes
+            if 'device_name' not in mapped:
+                mapped['device_name'] = 'unknown_device'
+            if 'action' not in mapped:
+                mapped['action'] = 'toggle'
+
+            return mapped
+
+        # Pour les autres outils, retourner tel quel
+        return params
     
     async def _initialize_agent(self) -> None:
         """Initialise l'agent ReAct"""
@@ -130,38 +188,33 @@ class GLaDOSReActEngine:
             verbose=self.config.core.verbose
         )
 
+        # Récupérer le react_header actuel
+        react_header = self.agent.get_prompts()["react_header"]
+        # Ajouter le system_prompt avant le template existant
+        react_header.template = system_prompt + react_header.template
+        # Mettre à jour l'agent
+        self.agent.update_prompts({"react_header": react_header})
+
         self.logger.info("Agent ReAct initialisé")
     
     def _build_system_prompt(self) -> str:
-        """Construit le prompt système pour GLaDOS"""
-        prompt = """
-Vous êtes GLaDOS, un assistant vocal intelligent et configurable.
+        """Construit le prompt système pour GLaDOS depuis la configuration"""
+        # Récupérer le prompt depuis la config
+        base_prompt = getattr(self.config.core, 'system_prompt', '')
 
-Votre personnalité :
-- Intelligent et efficace
-- Légèrement sarcastique mais utile
-- Orienté solutions
-- Capable de contrôler divers appareils intelligents
+        # Fallback si pas de prompt dans la config
+        if not base_prompt:
+            base_prompt = """Tu es GLaDOS, l'intelligence artificielle sarcastique d'Aperture Science.
+Réponds avec sarcasme et humour noir. Réponds UNIQUEMENT en français."""
 
-Vos capacités :
-- Contrôler les appareils connectés (lumières, prises, etc.)
-- Répondre aux questions
-- Exécuter des commandes système
-- Interagir via voix, texte ou Discord
+        prompt = base_prompt
 
-Instructions importantes :
-- Soyez concis mais informatif
-- Confirmez les actions avant de les exécuter
-- Gérez les erreurs avec élégance
-- Adaptez votre réponse au contexte de la conversation
-
-Outils disponibles :
-"""
-        
         # Ajouter la description des outils
-        for tool in self.tools:
-            prompt += f"- {tool.metadata.name}: {tool.metadata.description}\n"
-        
+        if self.tools:
+            prompt += "\n\nOUTILS DISPONIBLES :\n"
+            for tool in self.tools:
+                prompt += f"- {tool.metadata.name}: {tool.metadata.description}\n"
+
         return prompt
     
     async def _initialize_modules(self) -> None:
@@ -255,7 +308,8 @@ Outils disponibles :
             
             # Traiter le message avec l'agent ReAct
             response = await self._process_with_agent(message.content)
-            
+            self.logger.info(f"Réponse générée: '{response}'")
+
             # Créer le message de réponse
             response_message = GLaDOSMessage(
                 content=response,
@@ -266,7 +320,8 @@ Outils disponibles :
                     "original_type": message.message_type.value
                 }
             )
-            
+
+            self.logger.info(f"Envoi de la réponse vers {message.source}")
             # Envoyer la réponse via les modules de sortie appropriés
             await self._send_response(response_message, message.source)
             
@@ -286,11 +341,12 @@ Outils disponibles :
         Traite une requête avec l'agent ReAct
         """
         try:
-            # Utiliser l'agent pour traiter la requête avec l'API Workflow
-            from llama_index.core.agent.workflow import Context
+            # Utiliser l'agent ReAct pour tout - il décidera automatiquement s'il faut des outils
+            from llama_index.core.workflow import Context
 
-            ctx = Context()
-            result = await self.agent.run(ctx=ctx, query=query)
+            ctx = Context(self.agent)
+            result = await self.agent.run(ctx=ctx, user_msg=query, max_iterations=10)
+            self.logger.info(f"Réponse de l'agent: {result}")
             return str(result)
 
         except Exception as e:
