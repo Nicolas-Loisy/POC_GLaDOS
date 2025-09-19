@@ -40,13 +40,34 @@ class GLaDOSTTSOutput(OutputModule):
         """Initialise le module TTS GLaDOS"""
         try:
             self.logger.info("Initialisation du module TTS GLaDOS...")
-            
-            # Vérifier que le modèle existe
+
+            # Vérifier que le modèle existe avec chemin absolu
             model_file = Path(self.model_path)
+            if not model_file.is_absolute():
+                # Rendre le chemin absolu par rapport au répertoire racine du projet
+                project_root = Path(__file__).parent.parent.parent.parent
+                model_file = project_root / self.model_path
+                self.model_path = str(model_file)
+                self.logger.info(f"Chemin modèle converti en absolu: {self.model_path}")
+
             if not model_file.exists():
                 self.logger.error(f"Modèle TTS GLaDOS non trouvé: {self.model_path}")
                 self.logger.info("Téléchargez le modèle depuis: https://huggingface.co/rhasspy/piper-voices")
+
+                # Lister les fichiers dans le répertoire parent pour diagnostic
+                parent_dir = model_file.parent
+                if parent_dir.exists():
+                    files = list(parent_dir.glob("*.onnx"))
+                    if files:
+                        self.logger.info(f"Modèles trouvés dans {parent_dir}: {[f.name for f in files]}")
+                    else:
+                        self.logger.info(f"Aucun modèle .onnx trouvé dans {parent_dir}")
+                else:
+                    self.logger.error(f"Répertoire modèle inexistant: {parent_dir}")
+
                 return False
+
+            self.logger.info(f"Modèle TTS trouvé: {self.model_path} ({model_file.stat().st_size} octets)")
             
             # Créer répertoire temporaire pour les fichiers audio
             self.temp_dir = Path(tempfile.mkdtemp(prefix="glados_tts_"))
@@ -108,7 +129,8 @@ class GLaDOSTTSOutput(OutputModule):
             text = message.content.strip()
             if not text:
                 return True  # Rien à dire
-            
+
+            text = text.replace('GLaDOS', 'Gladoss')
             self.logger.info(f"Synthèse TTS: '{text}'")
             
             # Générer l'audio
@@ -134,50 +156,96 @@ class GLaDOSTTSOutput(OutputModule):
     async def _synthesize_text(self, text: str) -> Path:
         """
         Synthétise le texte en audio GLaDOS
-        
+
         Returns:
             Chemin vers le fichier audio généré
         """
         try:
             output_file = self.temp_dir / f"glados_output_{asyncio.get_event_loop().time()}.wav"
-            
+
+            self.logger.info(f"Début synthèse: '{text[:50]}...' vers {output_file}")
+            self.logger.info(f"Méthode utilisée: {'librairie Piper' if self.use_piper_library else 'commande piper'}")
+
             if self.use_piper_library:
                 # Utiliser la librairie Piper
                 success = await self._synthesize_with_library(text, output_file)
             else:
                 # Utiliser la commande piper
                 success = await self._synthesize_with_command(text, output_file)
-            
+
             if success and output_file.exists():
+                file_size = output_file.stat().st_size
+                self.logger.info(f"Synthèse réussie - Fichier: {file_size} octets")
+
+                if file_size <= 44:  # Seulement l'en-tête WAV
+                    self.logger.error("DIAGNOSTIC: Fichier audio vide (44 octets = en-tête WAV seulement)")
+                    return None
+
                 return output_file
             else:
                 self.logger.error("Échec de la synthèse TTS")
+                if output_file.exists():
+                    self.logger.error(f"Fichier existe mais échec reporté - Taille: {output_file.stat().st_size} octets")
                 return None
-                
+
         except Exception as e:
             self.logger.error(f"Erreur synthèse TTS: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     async def _synthesize_with_library(self, text: str, output_file: Path) -> bool:
-        """Synthèse avec la librairie Piper"""
+        """Synthèse avec la librairie Piper - AVEC AUDIO_INT16_BYTES"""
         try:
             from piper import PiperVoice
-            
+
+            self.logger.info(f"Chargement du modèle: {self.model_path}")
             # Charger le modèle
             voice = PiperVoice.load(str(self.model_path))
-            
-            # Synthétiser
+            self.logger.info(f"Modèle chargé avec succès - Sample rate: {voice.config.sample_rate}")
+
+            # Synthèse avec extraction correcte des AudioChunk
+            self.logger.info(f"Synthèse TTS : '{text[:50]}...'")
+
+            # Collecte des données audio depuis le générateur
+            audio_data = b""
+            chunk_count = 0
+
+            for chunk in voice.synthesize(text):
+                if hasattr(chunk, 'audio_int16_bytes'):
+                    audio_data += chunk.audio_int16_bytes
+                    chunk_count += 1
+                else:
+                    self.logger.warning(f"Chunk sans audio_int16_bytes: {type(chunk)}, attributs: {dir(chunk)}")
+
+            self.logger.info(f"Audio collecté: {len(audio_data)} octets en {chunk_count} chunks")
+
+            if not audio_data:
+                self.logger.error("Aucune donnée audio générée par Piper")
+                return False
+
+            # Écriture du fichier WAV avec les données collectées
             with wave.open(str(output_file), "wb") as wav_file:
                 wav_file.setframerate(voice.config.sample_rate)
                 wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setnchannels(1)  # mono
-                
-                voice.synthesize(text, wav_file)
-            
+                wav_file.writeframes(audio_data)
+
+            # Vérification finale
+            file_size = output_file.stat().st_size
+            self.logger.info(f"Synthèse terminée - Fichier généré: {file_size} octets")
+
+            if file_size <= 44:
+                self.logger.error("PROBLÈME: Fichier audio vide (seulement en-tête WAV)")
+                return False
+
+            self.logger.info("Synthèse TTS réussie avec audio_int16_bytes!")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Erreur synthèse librairie: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     async def _synthesize_with_command(self, text: str, output_file: Path) -> bool:
@@ -226,9 +294,16 @@ class GLaDOSTTSOutput(OutputModule):
                 # Normaliser et ajuster le volume
                 audio_data = audio_data.astype(np.float32) / 32768.0
                 audio_data *= self.volume
-                
+
+                # Vérifier la validité du device
+                device_id = self.device_id
+                try:
+                    sd.check_output_settings(device=device_id)
+                except Exception as e:
+                    self.logger.warning(f"Device {device_id} non disponible, utilisation du device par défaut. Erreur: {e}")
+                    device_id = None
                 # Jouer l'audio
-                sd.play(audio_data, samplerate=sample_rate, device=self.device_id)
+                sd.play(audio_data, samplerate=sample_rate, device=device_id)
                 sd.wait()  # Attendre la fin de la lecture
             
             self.logger.info("Audio GLaDOS joué avec succès")
