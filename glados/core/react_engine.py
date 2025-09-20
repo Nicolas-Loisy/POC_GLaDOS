@@ -131,52 +131,6 @@ class GLaDOSReActEngine:
             fn_schema=fn_schema
         )
 
-    def _map_tool_parameters(self, tool_name: str, params: dict) -> dict:
-        """
-        Mappe les paramètres LlamaIndex vers les paramètres attendus par l'adaptateur
-        """
-        if tool_name == 'tapo':
-            # Mapping spécifique pour TAPO
-            mapped = {}
-
-            # Mapper les noms d'appareils
-            device_name = None
-            if 'device_name' in params:
-                device_name = params['device_name']
-            elif 'device' in params:
-                device_name = params['device']
-
-            if device_name:
-                mapped['device_name'] = device_name
-
-            # Mapper les actions/états
-            action = None
-            if 'action' in params:
-                action = params['action']
-            elif 'state' in params:
-                action = params['state']
-
-            if action:
-                mapped['action'] = action
-
-            # Conserver les autres paramètres utiles
-            for key, value in params.items():
-                if key not in ['device', 'device_name', 'state', 'action']:
-                    # Paramètres optionnels pour TAPO
-                    if key in ['brightness', 'color', 'hue', 'saturation']:
-                        mapped[key] = value
-
-            # Valeurs par défaut si manquantes
-            if 'device_name' not in mapped:
-                mapped['device_name'] = 'unknown_device'
-            if 'action' not in mapped:
-                mapped['action'] = 'toggle'
-
-            return mapped
-
-        # Pour les autres outils, retourner tel quel
-        return params
-    
     async def _initialize_agent(self) -> None:
         """Initialise l'agent ReAct"""
         system_prompt = self._build_system_prompt()
