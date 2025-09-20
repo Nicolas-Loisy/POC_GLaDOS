@@ -37,6 +37,7 @@ class CoreConfig:
     max_iterations: int = 10
     verbose: bool = True
     temperature: float = 0.1
+    system_prompt: Optional[str] = None
 
 
 @dataclass
@@ -143,7 +144,8 @@ class ConfigManager:
             model_name=core_config.get('model_name', 'gpt-3.5-turbo'),
             max_iterations=core_config.get('max_iterations', 10),
             verbose=core_config.get('verbose', True),
-            temperature=core_config.get('temperature', 0.1)
+            temperature=core_config.get('temperature', 0.1),
+            system_prompt=core_config.get('system_prompt', None)
         )
         
         # Configuration des inputs

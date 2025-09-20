@@ -130,6 +130,9 @@ class GLaDOSTTSOutput(OutputModule):
             if not text:
                 return True  # Rien à dire
 
+            # Nettoyer les anciens fichiers temporaires avant la synthèse
+            self._cleanup_old_temp_files()
+
             text = text.replace('GLaDOS', 'Gladoss')
             self.logger.info(f"Synthèse TTS: '{text}'")
             
@@ -140,12 +143,15 @@ class GLaDOSTTSOutput(OutputModule):
             
             # Jouer l'audio
             success = await self._play_audio(audio_file)
-            
-            # Nettoyer le fichier temporaire
+
+            # Nettoyer le fichier temporaire immédiatement après lecture
             try:
-                audio_file.unlink()
-            except:
-                pass
+                if audio_file.exists():
+                    audio_file.unlink()
+                    self.logger.debug(f"Fichier temporaire supprimé: {audio_file}")
+
+            except Exception as cleanup_error:
+                self.logger.warning(f"Impossible de supprimer le fichier temporaire {audio_file}: {cleanup_error}")
             
             return success
             
@@ -320,14 +326,74 @@ class GLaDOSTTSOutput(OutputModule):
     async def cleanup(self) -> None:
         """Nettoie les ressources"""
         self.is_active = False
-        
+
         # Nettoyer le répertoire temporaire
         if self.temp_dir and self.temp_dir.exists():
             try:
                 import shutil
-                shutil.rmtree(self.temp_dir)
-                self.logger.info("Répertoire temporaire TTS nettoyé")
+                import time
+
+                # D'abord, essayer de supprimer les fichiers individuellement
+                temp_files = list(self.temp_dir.glob("*.wav"))
+                for temp_file in temp_files:
+                    try:
+                        temp_file.unlink()
+                        self.logger.debug(f"Fichier temporaire supprimé: {temp_file.name}")
+                    except Exception as file_error:
+                        self.logger.warning(f"Impossible de supprimer {temp_file.name}: {file_error}")
+
+                # Attendre un peu puis supprimer le répertoire
+                time.sleep(0.1)
+
+                # Supprimer le répertoire entier
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+                self.logger.info(f"Répertoire temporaire TTS nettoyé: {self.temp_dir}")
+
             except Exception as e:
                 self.logger.error(f"Erreur nettoyage répertoire temporaire: {e}")
-        
+                # Essai avec ignore_errors en cas d'échec
+                try:
+                    import shutil
+                    shutil.rmtree(self.temp_dir, ignore_errors=True)
+                    self.logger.info("Nettoyage forcé du répertoire temporaire réussi")
+                except:
+                    pass
+
         self.logger.info("Module TTS GLaDOS nettoyé")
+
+    def _cleanup_old_temp_files(self):
+        """Nettoie les anciens fichiers temporaires et dossiers de plus de 1 heure"""
+        import tempfile
+        import time
+        import shutil
+        from pathlib import Path
+
+        # Nettoyer aussi les anciens dossiers temporaires GLaDOS
+        temp_root = Path(tempfile.gettempdir())
+        current_time = time.time()
+        one_hour_ago = current_time - 3600  # 1 heure
+
+        try:
+            # Nettoyer les anciens dossiers temporaires GLaDOS
+            for temp_dir in temp_root.glob("glados_tts_*"):
+                if temp_dir.is_dir():
+                    try:
+                        # Vérifier l'âge du dossier
+                        if temp_dir.stat().st_mtime < one_hour_ago:
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                            self.logger.debug(f"Ancien dossier temporaire supprimé: {temp_dir.name}")
+                    except Exception as e:
+                        self.logger.debug(f"Impossible de supprimer l'ancien dossier {temp_dir.name}: {e}")
+
+            # Nettoyer les fichiers dans le dossier actuel
+            if self.temp_dir and self.temp_dir.exists():
+                for temp_file in self.temp_dir.glob("glados_output_*.wav"):
+                    if temp_file.stat().st_mtime < one_hour_ago:
+                        try:
+                            temp_file.unlink()
+                            self.logger.debug(f"Ancien fichier temporaire supprimé: {temp_file.name}")
+                        except Exception as e:
+                            self.logger.debug(f"Impossible de supprimer l'ancien fichier {temp_file.name}: {e}")
+
+        except Exception as e:
+            self.logger.debug(f"Erreur lors du nettoyage des anciens fichiers/dossiers: {e}")
