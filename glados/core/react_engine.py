@@ -204,8 +204,7 @@ class GLaDOSReActEngine:
 
         # Fallback si pas de prompt dans la config
         if not base_prompt:
-            base_prompt = """Tu es GLaDOS, l'intelligence artificielle sarcastique d'Aperture Science.
-Réponds avec sarcasme et humour noir. Réponds UNIQUEMENT en français."""
+            base_prompt = """Tu es GLaDOS, l'intelligence artificielle sarcastique d'Aperture Science. Réponds avec sarcasme et humour noir. Réponds UNIQUEMENT en français."""
 
         prompt = base_prompt
 
@@ -371,6 +370,8 @@ Réponds avec sarcasme et humour noir. Réponds UNIQUEMENT en français."""
             # Pour le terminal, utiliser la sortie terminal
             if "terminal_output" in self.output_modules:
                 output_modules_to_use.append(self.output_modules["terminal_output"])
+            if "tts_glados" in self.output_modules:
+                output_modules_to_use.append(self.output_modules["tts_glados"])
         
         elif original_source == "web":
             # Pour l'interface web, envoyer vers web et terminal

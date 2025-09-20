@@ -107,7 +107,7 @@ outputs:
 
   # Sortie Terminal
   terminal:
-    enabled: false
+    enabled: true
     color_scheme: "green" # green, blue, red, white
     prefix: "[GLaDOS] "
 
