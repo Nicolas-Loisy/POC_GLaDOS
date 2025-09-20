@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLaDOS Assistant Web</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>GLaDOS Assistant</h1>
+        <div class="status">
+            <div class="connection-status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="connectionStatus">Connexion...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="chat-section">
+            <div class="chat-header">
+                <h3>Conversation</h3>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    <div>Interface GLaDOS chargée</div>
+                    <div class="message-time" id="initTime"></div>
+                </div>
+            </div>
+            <div class="chat-input">
+                <div class="input-group">
+                    <input type="text" id="messageInput" placeholder="Tapez votre message à GLaDOS..." />
+                    <button class="btn" onclick="sendMessage()">Envoyer</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-section">
+            <div class="control-panel">
+                <h3>Actions rapides</h3>
+                <div class="quick-actions">
+                    <button class="quick-btn" onclick="sendQuickMessage('Allume la lampe de chambre')">
+                        Allumer la lampe
+                    </button>
+                    <button class="quick-btn" onclick="sendQuickMessage('Éteins toutes les lumières')">
+                        Éteindre les lumières
+                    </button>
+                    <button class="quick-btn" onclick="sendQuickMessage('Quelle heure est-il ?')">
+                        Quelle heure ?
+                    </button>
+                    <button class="quick-btn" onclick="sendQuickMessage('Raconte-moi une blague')">
+                        Blague
+                    </button>
+                    <button class="quick-btn" onclick="testConnection()" style="border-color: #f9d342; color: #f9d342;">
+                        Test connexion
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3>Informations</h3>
+                <div id="systemInfo">
+                    <p>Chargement...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #1b1b1d;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    background: #2c2c2c;
+    padding: 1rem 2rem;
+    border-bottom: 2px solid #f9d342;
+}
+
+.header h1 {
+    font-size: 2rem;
+    font-weight: 300;
+    color: #f9d342;
+    text-shadow: 0 0 10px rgba(249, 211, 66, 0.3);
+}
+
+.status {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-top: 0.5rem;
+}
+
+.container {
+    flex: 1;
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    gap: 2rem;
+    width: 100%;
+}
+
+.chat-section {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    background: #272729;
+    border-radius: 15px;
+    border: 1px solid #2b3137;
+    overflow: hidden;
+}
+
+.chat-header {
+    padding: 1rem 1.5rem;
+    background: #2c2c2c;
+    border-bottom: 1px solid #f9d342;
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    max-height: 400px;
+    min-height: 300px;
+}
+
+.message {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.message.user {
+    background: #2b3137;
+    border: 1px solid #f9d342;
+    margin-left: auto;
+    text-align: right;
+}
+
+.message.glados {
+    background: #1b1b1d;
+    border: 1px solid #2b3137;
+}
+
+.message.system {
+    background: #272729;
+    border: 1px solid #f9d342;
+    text-align: center;
+    font-style: italic;
+    font-size: 0.9rem;
+    margin: 0.5rem auto;
+    max-width: 60%;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    margin-top: 0.25rem;
+}
+
+.chat-input {
+    padding: 1rem 1.5rem;
+    background: #2c2c2c;
+    border-top: 1px solid #f9d342;
+}
+
+.input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.input-group input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: 1px solid #2b3137;
+    border-radius: 25px;
+    background: #1b1b1d;
+    color: #fff;
+    font-size: 1rem;
+    outline: none;
+}
+
+.input-group input::placeholder {
+    color: #888;
+}
+
+.input-group input:focus {
+    border-color: #f9d342;
+    box-shadow: 0 0 10px rgba(249, 211, 66, 0.3);
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: 1px solid #f9d342;
+    border-radius: 25px;
+    background: #f9d342;
+    color: #1b1b1d;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+}
+
+.btn:hover {
+    background: #2b3137;
+    color: #f9d342;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(249, 211, 66, 0.3);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.controls-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.control-panel {
+    background: #272729;
+    border-radius: 15px;
+    border: 1px solid #2b3137;
+    padding: 1.5rem;
+}
+
+.control-panel h3 {
+    margin-bottom: 1rem;
+    color: #f9d342;
+    font-weight: 400;
+}
+
+.quick-actions {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.quick-btn {
+    padding: 0.5rem 1rem;
+    background: #1b1b1d;
+    border: 1px solid #2b3137;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.quick-btn:hover {
+    background: #2b3137;
+    border-color: #f9d342;
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f9d342;
+    animation: pulse 2s infinite;
+}
+
+.status-dot.disconnected {
+    background: #ff4444;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+        padding: 1rem;
+    }
+
+    .header {
+        padding: 1rem;
+    }
+
+    .header h1 {
+        font-size: 1.5rem;
+    }
+}

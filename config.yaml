@@ -80,7 +80,7 @@ inputs:
   # Interface Web locale
   web:
     enabled: true
-    outputs: ["terminal"] # Outputs à utiliser pour les réponses
+    outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
     host: "127.0.0.1" # Interface locale seulement
     port: 8080
     title: "GLaDOS Assistant Web Interface"
@@ -97,7 +97,7 @@ inputs:
 
   # Interface Terminal
   terminal:
-    enabled: true
+    enabled: false
     outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
     prompt: "GLaDOS> "
     history_size: 100
