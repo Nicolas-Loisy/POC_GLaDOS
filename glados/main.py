@@ -71,8 +71,9 @@ class GLaDOSApplication:
         """Configure les gestionnaires de signaux pour un arrêt propre"""
         def signal_handler(signum, frame):
             self.logger.info(f"Signal {signum} reçu, arrêt de GLaDOS...")
-            # Déclencher l'événement d'arrêt au lieu de créer une task
-            self._shutdown_event.set()
+            # Déclencher l'événement d'arrêt de manière thread-safe
+            if not self._shutdown_event.is_set():
+                self._shutdown_event.set()
 
         # Gérer Ctrl+C et autres signaux d'arrêt
         if sys.platform != 'win32':
@@ -100,12 +101,9 @@ class GLaDOSApplication:
             self.logger.info("GLaDOS est maintenant actif!")
             self.logger.info("Utilisez Ctrl+C pour arrêter")
             
-            # Attendre le signal d'arrêt avec un timeout pour éviter les blocages
-            try:
-                await self._shutdown_event.wait()
-            except KeyboardInterrupt:
-                self.logger.info("KeyboardInterrupt dans la boucle principale")
-                self._shutdown_event.set()
+            # Attendre le signal d'arrêt
+            await self._shutdown_event.wait()
+            self.logger.info("Signal d'arrêt reçu")
             
         except KeyboardInterrupt:
             self.logger.info("Interruption clavier détectée")
@@ -139,16 +137,19 @@ class GLaDOSApplication:
             self._shutdown_event.set()
 
             # Forcer l'arrêt des tâches asyncio restantes
-            tasks = [task for task in asyncio.all_tasks() if not task.done()]
-            if tasks:
-                self.logger.info(f"Annulation de {len(tasks)} tâches restantes...")
-                for task in tasks:
-                    task.cancel()
+            try:
+                tasks = [task for task in asyncio.all_tasks() if not task.done() and task != asyncio.current_task()]
+                if tasks:
+                    self.logger.info(f"Annulation de {len(tasks)} tâches restantes...")
+                    for task in tasks:
+                        task.cancel()
 
-                try:
-                    await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
-                except asyncio.TimeoutError:
-                    self.logger.warning("Timeout lors de l'arrêt des tâches")
+                    try:
+                        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        self.logger.warning("Timeout lors de l'arrêt des tâches")
+            except Exception as e:
+                self.logger.error(f"Erreur lors de l'arrêt des tâches: {e}")
     
     def is_active(self) -> bool:
         """Retourne l'état de l'application"""
@@ -205,15 +206,6 @@ def cli_main():
     """
     Point d'entrée pour la ligne de commande
     """
-    import sys
-
-    def force_exit_handler(signum, frame):
-        print(f"\n!!! Arrêt forcé (signal {signum}) !!!")
-        sys.exit(1)
-
-    # Gestionnaire d'arrêt forcé pour double Ctrl+C
-    signal.signal(signal.SIGINT, force_exit_handler)
-
     try:
         return asyncio.run(main())
     except KeyboardInterrupt:

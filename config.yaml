@@ -8,7 +8,7 @@ core:
 
   # Configuration du LLM
   llm:
-    type: "openai"  # openai, anthropic, ollama, huggingface, azure_openai
+    type: "openai" # openai, anthropic, ollama, huggingface, azure_openai
     params:
       model: "gpt-4o"
       temperature: 1.3
@@ -79,7 +79,7 @@ inputs:
 
   # Interface Web locale
   web:
-    enabled: false
+    enabled: true
     outputs: ["terminal"] # Outputs à utiliser pour les réponses
     host: "127.0.0.1" # Interface locale seulement
     port: 8080
