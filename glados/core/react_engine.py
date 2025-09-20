@@ -251,51 +251,60 @@ class GLaDOSReActEngine:
     
     async def _send_response(self, message: GLaDOSMessage, original_source: str) -> None:
         """
-        Envoie une réponse via les modules de sortie appropriés
+        Envoie une réponse via les modules de sortie configurés pour chaque source d'entrée
         """
-        # Déterminer quels modules de sortie utiliser selon la source
         output_modules_to_use = []
-        
-        if original_source == "wake_word":
-            # Pour les commandes vocales, privilégier TTS + terminal
-            if "tts_glados" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["tts_glados"])
-            if "terminal" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["terminal"])
-        
-        elif original_source == "terminal":
-            # Pour le terminal, utiliser la sortie terminal
-            if "terminal" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["terminal"])
-            if "tts_glados" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["tts_glados"])
-        
-        elif original_source == "web":
-            # Pour l'interface web, envoyer vers web et terminal
-            if "web" in self.input_modules:
-                # Envoyer la réponse vers l'interface web
-                try:
-                    await self.input_modules["web"].send_response_to_web(message.content)
-                except Exception as e:
-                    self.logger.error(f"Erreur envoi réponse web: {e}")
-            
-            if "terminal" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["terminal"])
-        
-        elif original_source == "discord":
-            # Pour Discord, renvoyer sur Discord (à implémenter)
-            pass
-        
-        # Si aucun module spécifique, utiliser tous les modules actifs
-        if not output_modules_to_use:
+
+        # Récupérer la liste des outputs configurée pour cette source d'entrée
+        configured_outputs = self._get_configured_outputs_for_source(original_source)
+
+        if configured_outputs:
+            # Utiliser les outputs configurés pour cette source
+            for output_name in configured_outputs:
+                if output_name in self.output_modules:
+                    output_modules_to_use.append(self.output_modules[output_name])
+                else:
+                    self.logger.warning(f"Module de sortie '{output_name}' configuré mais non disponible pour source '{original_source}'")
+        else:
+            # Fallback : utiliser tous les modules actifs si aucune configuration spécifique
+            self.logger.debug(f"Aucune configuration d'outputs trouvée pour '{original_source}', utilisation de tous les modules actifs")
             output_modules_to_use = list(self.output_modules.values())
-        
-        # Envoyer le message
+
+        # Gestion spéciale pour l'interface web qui a sa propre méthode de réponse
+        if original_source == "web" and "web" in self.input_modules:
+            try:
+                await self.input_modules["web"].send_response_to_web(message.content)
+            except Exception as e:
+                self.logger.error(f"Erreur envoi réponse web: {e}")
+
+        # Envoyer le message via les modules de sortie sélectionnés
         for module in output_modules_to_use:
             try:
                 await module.send_message(message)
             except Exception as e:
                 self.logger.error(f"Erreur envoi via {module.name}: {e}")
+
+    def _get_configured_outputs_for_source(self, source: str) -> list:
+        """
+        Récupère la liste des outputs configurés pour une source d'entrée donnée
+
+        Args:
+            source: Nom de la source d'entrée
+
+        Returns:
+            Liste des noms des modules de sortie à utiliser
+        """
+        # Parcourir la configuration des inputs pour trouver les outputs configurés
+        for attr_name in dir(self.config.inputs):
+            if attr_name.startswith('_') or attr_name == 'enabled':
+                continue
+
+            if attr_name == source:
+                input_config = getattr(self.config.inputs, attr_name, None)
+                if isinstance(input_config, dict):
+                    return input_config.get('outputs', [])
+
+        return []
     
     async def start(self) -> None:
         """Démarre le moteur GLaDOS"""
