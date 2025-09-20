@@ -3,7 +3,7 @@ Registre des outils disponibles pour GLaDOS
 Enregistre automatiquement tous les adaptateurs d'outils
 """
 
-from ...core.interfaces import ToolAdapterFactory
+from ...core.factories import ToolAdapterFactory
 from ..tapo.tapo_adapter import TapoAdapter
 
 

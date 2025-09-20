@@ -12,10 +12,10 @@ from llama_index.core.tools import BaseTool, FunctionTool
 from llama_index.core.memory import ChatMemoryBuffer
 
 from .interfaces import (
-    InputModule, OutputModule, ToolAdapter, 
-    GLaDOSMessage, GLaDOSEvent, MessageType,
-    InputModuleFactory, OutputModuleFactory, ToolAdapterFactory
+    InputModule, OutputModule, ToolAdapter,
+    GLaDOSMessage, GLaDOSEvent, MessageType
 )
+from .factories import InputModuleFactory, OutputModuleFactory, ToolAdapterFactory
 from ..config.config_manager import ConfigManager, GLaDOSConfig
 
 
@@ -227,76 +227,19 @@ class GLaDOSReActEngine:
             await self._initialize_output_modules()
     
     async def _initialize_input_modules(self) -> None:
-        """Initialise les modules d'entrée"""
-        inputs_config = self.config.inputs
-        
-        # Wake word + STT
-        if inputs_config.wake_word and inputs_config.wake_word.get('enabled', False):
-            try:
-                module = InputModuleFactory.create('wake_word', 'wake_word', inputs_config.wake_word)
-                await module.initialize()
-                module.subscribe_to_messages(self._handle_input_message)
-                self.input_modules['wake_word'] = module
-                self.logger.info("Module Wake Word initialisé")
-            except Exception as e:
-                self.logger.error(f"Erreur initialisation Wake Word: {e}")
-        
-        # Discord
-        if inputs_config.discord and inputs_config.discord.get('enabled', False):
-            try:
-                module = InputModuleFactory.create('discord', 'discord', inputs_config.discord)
-                await module.initialize()
-                module.subscribe_to_messages(self._handle_input_message)
-                self.input_modules['discord'] = module
-                self.logger.info("Module Discord initialisé")
-            except Exception as e:
-                self.logger.error(f"Erreur initialisation Discord: {e}")
-        
-        # Terminal
-        if inputs_config.terminal and inputs_config.terminal.get('enabled', True):
-            try:
-                module = InputModuleFactory.create('terminal', 'terminal', inputs_config.terminal)
-                await module.initialize()
-                module.subscribe_to_messages(self._handle_input_message)
-                self.input_modules['terminal'] = module
-                self.logger.info("Module Terminal initialisé")
-            except Exception as e:
-                self.logger.error(f"Erreur initialisation Terminal: {e}")
-        
-        # Web Interface
-        if hasattr(inputs_config, 'web') and inputs_config.web and inputs_config.web.get('enabled', False):
-            try:
-                module = InputModuleFactory.create('web', 'web', inputs_config.web)
-                await module.initialize()
-                module.subscribe_to_messages(self._handle_input_message)
-                self.input_modules['web'] = module
-                self.logger.info("Module Web Interface initialisé")
-            except Exception as e:
-                self.logger.error(f"Erreur initialisation Web Interface: {e}")
+        """Initialise automatiquement tous les modules d'entrée configurés"""
+        self.input_modules = await InputModuleFactory.create_modules_from_config(
+            self.config.inputs,
+            self._handle_input_message,
+            self.logger
+        )
     
     async def _initialize_output_modules(self) -> None:
-        """Initialise les modules de sortie"""
-        outputs_config = self.config.outputs
-        
-        # TTS GLaDOS
-        if outputs_config.tts_glados and outputs_config.tts_glados.get('enabled', False):
-            try:
-                module = OutputModuleFactory.create('tts_glados', 'tts_glados', outputs_config.tts_glados)
-                await module.initialize()
-                self.output_modules['tts_glados'] = module
-                self.logger.info("Module TTS GLaDOS initialisé")
-            except Exception as e:
-                self.logger.error(f"Erreur initialisation TTS GLaDOS: {e}")
-        
-        # Terminal output
-        if outputs_config.terminal and outputs_config.terminal.get('enabled', True):
-            try:
-                module = OutputModuleFactory.create('terminal_output', 'terminal_output', outputs_config.terminal)
-                await module.initialize()
-                self.output_modules['terminal_output'] = module
-                self.logger.info("Module Terminal Output initialisé")
-            except Exception as e:
-                self.logger.error(f"Erreur initialisation Terminal Output: {e}")
+        """Initialise automatiquement tous les modules de sortie configurés"""
+        self.output_modules = await OutputModuleFactory.create_modules_from_config(
+            self.config.outputs,
+            self.logger
+        )
     
     async def _handle_input_message(self, message: GLaDOSMessage) -> None:
         """
@@ -363,13 +306,13 @@ class GLaDOSReActEngine:
             # Pour les commandes vocales, privilégier TTS + terminal
             if "tts_glados" in self.output_modules:
                 output_modules_to_use.append(self.output_modules["tts_glados"])
-            if "terminal_output" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["terminal_output"])
+            if "terminal" in self.output_modules:
+                output_modules_to_use.append(self.output_modules["terminal"])
         
         elif original_source == "terminal":
             # Pour le terminal, utiliser la sortie terminal
-            if "terminal_output" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["terminal_output"])
+            if "terminal" in self.output_modules:
+                output_modules_to_use.append(self.output_modules["terminal"])
             if "tts_glados" in self.output_modules:
                 output_modules_to_use.append(self.output_modules["tts_glados"])
         
@@ -382,8 +325,8 @@ class GLaDOSReActEngine:
                 except Exception as e:
                     self.logger.error(f"Erreur envoi réponse web: {e}")
             
-            if "terminal_output" in self.output_modules:
-                output_modules_to_use.append(self.output_modules["terminal_output"])
+            if "terminal" in self.output_modules:
+                output_modules_to_use.append(self.output_modules["terminal"])
         
         elif original_source == "discord":
             # Pour Discord, renvoyer sur Discord (à implémenter)

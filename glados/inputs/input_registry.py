@@ -2,7 +2,7 @@
 Registre des modules d'entrée pour GLaDOS
 """
 
-from ..core.interfaces import InputModuleFactory
+from ..core.factories import InputModuleFactory
 from .wake_word.wake_word_input import WakeWordInput
 from .terminal.terminal_input import TerminalInput
 from .web.web_input import WebInput
