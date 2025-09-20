@@ -7,7 +7,6 @@ import asyncio
 from typing import Dict, List, Any, Optional
 import logging
 from llama_index.core.agent.workflow import ReActAgent
-from llama_index.llms.openai import OpenAI
 from llama_index.core.tools import BaseTool, FunctionTool
 from llama_index.core.memory import ChatMemoryBuffer
 
@@ -15,7 +14,7 @@ from .interfaces import (
     InputModule, OutputModule, ToolAdapter,
     GLaDOSMessage, GLaDOSEvent, MessageType
 )
-from .factories import InputModuleFactory, OutputModuleFactory, ToolAdapterFactory
+from .factories import InputModuleFactory, OutputModuleFactory, ToolAdapterFactory, LLMFactory
 from ..config.config_manager import ConfigManager, GLaDOSConfig
 
 
@@ -71,13 +70,21 @@ class GLaDOSReActEngine:
             return False
     
     async def _initialize_llm(self) -> None:
-        """Initialise le modèle de langage"""
-        self.llm = OpenAI(
-            model=self.config.core.model_name,
-            temperature=self.config.core.temperature,
-            api_key=ConfigManager().get_env_var('OPENAI_API_KEY')
-        )
-        self.logger.info(f"LLM initialisé: {self.config.core.model_name}")
+        """Initialise le modèle de langage via la factory"""
+        try:
+            llm_config = self.config.core.llm
+            if not llm_config:
+                raise ValueError("Configuration LLM manquante")
+
+            self.llm = LLMFactory.create(llm_config)
+
+            llm_type = llm_config.get('type', 'unknown')
+            llm_model = llm_config.get('params', {}).get('model', 'unknown')
+            self.logger.info(f"LLM initialisé: {llm_type}/{llm_model}")
+
+        except Exception as e:
+            self.logger.error(f"Erreur lors de l'initialisation du LLM: {e}")
+            raise
     
     async def _initialize_tools(self) -> None:
         """Charge et initialise tous les outils/tools"""

@@ -3,11 +3,16 @@
 
 # Configuration du moteur ReAct
 core:
-  model_name: "gpt-4o"
   max_iterations: 15
   verbose: true
-  temperature: 1.3
-  openai_api_key: ${OPENAI_API_KEY} # Variable d'environnement
+
+  # Configuration du LLM
+  llm:
+    type: "openai"  # openai, anthropic, ollama, huggingface, azure_openai
+    params:
+      model: "gpt-4o"
+      temperature: 1.3
+      api_key: ${OPENAI_API_KEY}
 
   # Prompt système pour GLaDOS
   system_prompt: |
