@@ -6,6 +6,7 @@ from ..core.factories import InputModuleFactory
 from .wake_word.wake_word_input import WakeWordInput
 from .terminal.terminal_input import TerminalInput
 from .web.web_input import WebInput
+from .discord.discord_input import DiscordInput
 
 
 def register_input_modules():
@@ -13,8 +14,7 @@ def register_input_modules():
     InputModuleFactory.register('wake_word', WakeWordInput)
     InputModuleFactory.register('terminal', TerminalInput)
     InputModuleFactory.register('web', WebInput)
-    # TODO: Ajouter Discord input
-    # InputModuleFactory.register('discord', DiscordInput)
+    InputModuleFactory.register('discord', DiscordInput)
     
     print(f"Modules d'entrée enregistrés: {InputModuleFactory.get_available_types()}")
 

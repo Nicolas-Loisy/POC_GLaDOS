@@ -207,6 +207,10 @@ class WebInput(InputModule):
         """Nettoie les ressources"""
         await self.stop_listening()
 
+    async def send_response(self, response: str, metadata: Dict[str, Any] = None) -> None:
+        """Envoie une réponse GLaDOS vers l'interface web"""
+        await self.send_response_to_web(response)
+
     async def send_response_to_web(self, response: str):
         """Envoie une réponse GLaDOS vers l'interface web"""
         if self.websocket_connections:

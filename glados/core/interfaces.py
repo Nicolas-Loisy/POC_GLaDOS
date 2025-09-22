@@ -78,7 +78,14 @@ class InputModule(ABC):
     async def cleanup(self) -> None:
         """Nettoie les ressources du module"""
         pass
-    
+
+    async def send_response(self, response: str, metadata: Dict[str, Any] = None) -> None:
+        """
+        Envoie une réponse vers la source d'entrée (optionnel)
+        Les modules qui ont besoin d'envoyer des réponses personnalisées peuvent override cette méthode
+        """
+        pass  # Implémentation par défaut: ne fait rien
+
     def subscribe_to_messages(self, handler: Callable[[GLaDOSMessage], None]) -> None:
         """S'abonne aux messages de ce module"""
         self._message_handlers.append(handler)

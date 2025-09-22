@@ -213,15 +213,21 @@ class GLaDOSReActEngine:
             response = await self._process_with_agent(message.content)
             self.logger.info(f"Réponse générée: '{response}'")
 
-            # Créer le message de réponse
+            # Créer le message de réponse en préservant les métadonnées originales
+            response_metadata = {
+                "original_source": message.source,
+                "original_type": message.message_type.value
+            }
+
+            # Préserver les métadonnées du message original pour les modules qui en ont besoin
+            if message.metadata:
+                response_metadata.update(message.metadata)
+
             response_message = GLaDOSMessage(
                 content=response,
                 message_type=MessageType.TEXT,
                 source="glados_engine",
-                metadata={
-                    "original_source": message.source,
-                    "original_type": message.message_type.value
-                }
+                metadata=response_metadata
             )
 
             self.logger.info(f"Envoi de la réponse vers {message.source}")
@@ -231,11 +237,19 @@ class GLaDOSReActEngine:
         except Exception as e:
             self.logger.error(f"Erreur lors du traitement du message: {e}")
             
-            # Envoyer un message d'erreur
+            # Envoyer un message d'erreur en préservant les métadonnées
+            error_metadata = {
+                "original_source": message.source,
+                "original_type": message.message_type.value
+            }
+            if message.metadata:
+                error_metadata.update(message.metadata)
+
             error_message = GLaDOSMessage(
                 content=f"Désolé, j'ai rencontré une erreur: {str(e)}",
                 message_type=MessageType.ERROR,
-                source="glados_engine"
+                source="glados_engine",
+                metadata=error_metadata
             )
             await self._send_response(error_message, message.source)
     
@@ -277,12 +291,12 @@ class GLaDOSReActEngine:
             self.logger.debug(f"Aucune configuration d'outputs trouvée pour '{original_source}', utilisation de tous les modules actifs")
             output_modules_to_use = list(self.output_modules.values())
 
-        # Gestion spéciale pour l'interface web qui a sa propre méthode de réponse
-        if original_source == "web" and "web" in self.input_modules:
+        # Gestion des réponses personnalisées pour les modules d'entrée
+        if original_source in self.input_modules:
             try:
-                await self.input_modules["web"].send_response_to_web(message.content)
+                await self.input_modules[original_source].send_response(message.content, message.metadata)
             except Exception as e:
-                self.logger.error(f"Erreur envoi réponse web: {e}")
+                self.logger.error(f"Erreur envoi réponse {original_source}: {e}")
 
         # Envoyer le message via les modules de sortie sélectionnés
         for module in output_modules_to_use:
