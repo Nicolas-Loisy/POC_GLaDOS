@@ -5,6 +5,7 @@ Enregistre automatiquement tous les adaptateurs d'outils
 
 from ...core.factories import ToolAdapterFactory
 from ..tapo.tapo_adapter import TapoAdapter
+from ..ir_osram.ir_osram_adapter import IROsramAdapter
 
 
 def register_all_tools():
@@ -14,10 +15,12 @@ def register_all_tools():
     """
     # Enregistrer l'adaptateur Tapo
     ToolAdapterFactory.register('tapo', TapoAdapter)
-    
+
+    # Enregistrer l'adaptateur IR OSRAM
+    ToolAdapterFactory.register('ir_osram', IROsramAdapter)
+
     # TODO: Ajouter d'autres adaptateurs ici
     # ToolAdapterFactory.register('ir_yamaha', YamahaIRAdapter)
-    # ToolAdapterFactory.register('ir_osram', OsramIRAdapter)
     
     print(f"Outils enregistrés: {ToolAdapterFactory.get_available_types()}")
 

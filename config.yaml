@@ -64,7 +64,7 @@ inputs:
 
   # Wake word + Speech-to-Text
   wake_word:
-    enabled: false
+    enabled: true
     outputs: ["tts_glados", "terminal"] # Outputs à utiliser pour les réponses
     porcupine_access_key: ${PORCUPINE_ACCESS_KEY}
     model_path: "wake_word_model/porcupine_params_de.pv"
@@ -79,7 +79,7 @@ inputs:
 
   # Interface Web locale
   web:
-    enabled: true
+    enabled: false
     outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
     host: "127.0.0.1" # Interface locale seulement
     port: 8080
@@ -88,7 +88,7 @@ inputs:
 
   # Discord Bot
   discord:
-    enabled: false
+    enabled: true
     outputs: ["terminal"] # Outputs à utiliser pour les réponses
     bot_token: ${DISCORD_BOT_TOKEN}
     command_prefix: "!"
@@ -97,7 +97,7 @@ inputs:
 
   # Interface Terminal
   terminal:
-    enabled: false
+    enabled: true
     outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
     prompt: "GLaDOS> "
     history_size: 100
@@ -137,7 +137,13 @@ tools:
         ip: "192.168.1.110"
         name: "Prise connectée"
 
-  # Contrôle infrarouge
+  # Contrôle infrarouge OSRAM RGBW
+  ir_osram:
+    enabled: true
+    ir_pin: 18  # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    description: "Contrôle des ampoules OSRAM RGBW par infrarouge"
+
+  # Contrôle infrarouge (legacy - à migrer)
   ir_control:
     enabled: false
     devices:
