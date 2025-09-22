@@ -146,6 +146,13 @@ tools:
     tool_name: "control_osram_ir"
     tool_description: "Contrôle de l'ampoule OSRAM RGBW de la chambre par infrarouge"
 
+  # Contrôle infrarouge Yamaha
+  ir_yamaha:
+    enabled: true
+    ir_pin: 18  # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    tool_name: "control_yamaha_ir"
+    tool_description: "Contrôle de l'amplificateur Yamaha RX-E600MK2 par infrarouge"
+
   # Contrôle infrarouge (legacy - à migrer)
   ir_control:
     enabled: false
