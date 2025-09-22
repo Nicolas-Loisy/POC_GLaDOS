@@ -4,10 +4,12 @@ Basé sur le script IR OSRAM de MarkIO - Fonctionnement uniquement sur Raspberry
 """
 
 import asyncio
+import os
 import platform
-from typing import Dict, Any, List, Optional, Union
+import time
+from typing import Dict, Any, Union
 import logging
-from pydantic import BaseModel, Field, model_validator, Discriminator
+from pydantic import BaseModel, Field, model_validator
 from enum import Enum
 
 from ...core.interfaces import ToolAdapter
@@ -238,32 +240,29 @@ class OsramEffectParameters(OsramBaseParameters):
         return self
 
 
-# Union discriminé pour la validation automatique des paramètres
-def get_discriminator_value(v: Any) -> str:
-    """Fonction discriminatrice pour identifier le bon modèle selon l'action"""
-    if isinstance(v, dict):
-        action = v.get('action')
-        if action == 'power':
-            return 'power'
-        elif action == 'brightness':
-            return 'brightness'
-        elif action == 'color':
-            return 'color'
-        elif action == 'effect':
-            return 'effect'
-    return 'power'  # default
+# Union des paramètres OSRAM pour la validation
+OsramParameters = Union[
+    OsramPowerParameters,
+    OsramBrightnessParameters,
+    OsramColorParameters,
+    OsramEffectParameters
+]
 
 
-OsramParameters = Discriminator(
-    discriminator=get_discriminator_value,
-    custom_serializer=lambda x: x.model_dump(),
-    choices={
-        'power': OsramPowerParameters,
-        'brightness': OsramBrightnessParameters,
-        'color': OsramColorParameters,
-        'effect': OsramEffectParameters,
-    }
-)
+def validate_osram_parameters(params_dict: Dict[str, Any]) -> Union[OsramPowerParameters, OsramBrightnessParameters, OsramColorParameters, OsramEffectParameters]:
+    """Valide et retourne les paramètres selon l'action"""
+    action = params_dict.get('action')
+
+    if action == 'power':
+        return OsramPowerParameters(**params_dict)
+    elif action == 'brightness':
+        return OsramBrightnessParameters(**params_dict)
+    elif action == 'color':
+        return OsramColorParameters(**params_dict)
+    elif action == 'effect':
+        return OsramEffectParameters(**params_dict)
+    else:
+        raise ValueError(f"Action '{action}' non supportée. Actions valides: power, brightness, color, effect")
 
 
 class OsramRGBWRemote:
@@ -373,8 +372,6 @@ class OsramRGBWRemote:
         if duration_us <= 0:
             return
 
-        import time
-
         period_us = 26.3  # 1000000 / 38000
         on_time_us = period_us * self.duty_cycle
         off_time_us = period_us - on_time_us
@@ -401,9 +398,6 @@ class OsramRGBWRemote:
 
     def send_ir_signal(self, pulses: list):
         """Envoie le signal IR avec timing précis"""
-        import time
-        import os
-
         try:
             try:
                 os.nice(-10)  # Priorité plus haute
@@ -441,7 +435,6 @@ class OsramRGBWRemote:
         self.send_ir_signal(pulses)
 
         # Répétitions si demandées
-        import time
         for _ in range(repeat_count):
             time.sleep(0.108)  # Gap standard NEC
             self.send_ir_signal(pulses)
@@ -464,7 +457,13 @@ class IROsramAdapter(ToolAdapter):
 
         # Configuration
         self.ir_pin = config.get('ir_pin', 18)
+        self.tool_name = config.get('tool_name', 'control_osram_ir')
+        self.tool_description = config.get('tool_description', 'Contrôle OSRAM RGBW par infrarouge')
         self.remote = None
+
+        # Mettre à jour le nom et la description depuis la config
+        self.name = self.tool_name
+        self.description = self.tool_description
 
         # Validation de la plateforme
         if not IS_RASPBERRY_PI:
@@ -486,44 +485,56 @@ class IROsramAdapter(ToolAdapter):
             self.logger.error(f"Erreur initialisation IR OSRAM: {e}")
             return False
 
-    def create_tools(self) -> List:
-        """Crée les outils LlamaIndex pour le contrôle IR OSRAM"""
-        if not self.remote:
-            return []
+    def get_parameters_schema(self) -> Dict[str, Any]:
+        """Retourne le schéma des paramètres pour l'IR OSRAM"""
+        return {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["power", "brightness", "color", "effect"],
+                    "description": "Type d'action à effectuer"
+                },
+                "command": {
+                    "type": "string",
+                    "description": "Commande spécifique (ex: 'on', 'red', 'bright_up', 'flash')"
+                },
+                "repeat_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10,
+                    "default": 0,
+                    "description": "Nombre de répétitions du signal (0-10)"
+                }
+            },
+            "required": ["action", "command"]
+        }
 
-        from llama_index.core.tools import FunctionTool
-
-        def control_osram_ir(
-            action: str,
-            command: str,
-            repeat_count: int = 0
-        ) -> str:
-            """
-            Contrôle une ampoule OSRAM RGBW par infrarouge.
-
-            Args:
-                action: Type d'action ('power', 'brightness', 'color', 'effect')
-                command: Commande spécifique (ex: 'on', 'red', 'bright_up', 'flash')
-                repeat_count: Nombre de répétitions du signal (optionnel, 0-10)
-
-            Returns:
-                Résultat de l'opération
-            """
-            return asyncio.run(self._control_osram_ir(action, command, repeat_count))
-
-        return [
-            FunctionTool.from_defaults(
-                fn=control_osram_ir,
-                name="control_osram_ir",
-                description="Contrôle d'une ampoule OSRAM RGBW par infrarouge (Ampoule de la chambre)."
-            )
-        ]
-
-    async def _control_osram_ir(self, action: str, command: str, repeat_count: int = 0) -> str:
+    async def execute(self, **kwargs) -> Dict[str, Any]:
         """Exécute une commande IR OSRAM avec validation stricte"""
         if not self.remote:
-            return "Contrôle IR OSRAM non disponible (non Raspberry Pi ou lgpio manquant)"
+            return {
+                "success": False,
+                "error": "Contrôle IR OSRAM non disponible (non Raspberry Pi ou lgpio manquant)"
+            }
 
+        try:
+            # Récupérer les paramètres
+            action = kwargs.get('action')
+            command = kwargs.get('command')
+            repeat_count = kwargs.get('repeat_count', 0)
+
+            return await self._control_osram_ir(action, command, repeat_count)
+
+        except Exception as e:
+            self.logger.error(f"Erreur contrôle IR OSRAM: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def _control_osram_ir(self, action: str, command: str, repeat_count: int = 0) -> Dict[str, Any]:
+        """Exécute une commande IR OSRAM avec validation stricte"""
         try:
             # Validation stricte avec Pydantic
             params_dict = {
@@ -532,8 +543,8 @@ class IROsramAdapter(ToolAdapter):
                 'repeat_count': repeat_count
             }
 
-            # Le discriminator choisit automatiquement le bon modèle
-            validated_params = OsramParameters.validate_python(params_dict)
+            # Validation avec la fonction helper
+            validated_params = validate_osram_parameters(params_dict)
 
             # Conversion de la commande en format attendu
             command_upper = validated_params.command.value.upper()
@@ -562,16 +573,27 @@ class IROsramAdapter(ToolAdapter):
             success = self.remote.send_command(command_upper, validated_params.repeat_count)
 
             if success:
-                result = f"Commande IR OSRAM '{validated_params.command.value}' envoyée"
+                message = f"Commande IR OSRAM '{validated_params.command.value}' envoyée"
                 if validated_params.repeat_count > 0:
-                    result += f" ({validated_params.repeat_count} répétitions)"
-                return result
+                    message += f" ({validated_params.repeat_count} répétitions)"
+                return {
+                    "success": True,
+                    "message": message,
+                    "action": validated_params.command.value,
+                    "repeat_count": validated_params.repeat_count
+                }
             else:
-                return f"Échec envoi commande IR OSRAM '{validated_params.command.value}'"
+                return {
+                    "success": False,
+                    "error": f"Échec envoi commande IR OSRAM '{validated_params.command.value}'"
+                }
 
         except Exception as e:
             self.logger.error(f"Erreur contrôle IR OSRAM: {e}")
-            return f"Erreur: {str(e)}"
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     async def cleanup(self) -> None:
         """Nettoie les ressources"""

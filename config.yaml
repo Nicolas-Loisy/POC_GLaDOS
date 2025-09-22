@@ -127,6 +127,8 @@ tools:
     enabled: true
     email: ${TAPO_EMAIL}
     password: ${TAPO_PASSWORD}
+    tool_name: "control_tapo_device"
+    tool_description: "Contrôle des appareils Tapo connectés - prises et ampoules intelligentes"
     devices:
       lampe_chambre:
         type: "L530"
@@ -141,7 +143,8 @@ tools:
   ir_osram:
     enabled: true
     ir_pin: 18  # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
-    description: "Contrôle des ampoules OSRAM RGBW par infrarouge"
+    tool_name: "control_osram_ir"
+    tool_description: "Contrôle de l'ampoule OSRAM RGBW de la chambre par infrarouge"
 
   # Contrôle infrarouge (legacy - à migrer)
   ir_control:

@@ -239,12 +239,17 @@ class TapoAdapter(ToolAdapter):
         self.email = config.get('email') or ConfigManager().get_env_var('TAPO_EMAIL')
         self.password = config.get('password') or ConfigManager().get_env_var('TAPO_PASSWORD')
         self.devices = config.get('devices', {})
+        self.tool_name = config.get('tool_name', 'control_tapo_device')
+        self.tool_description = config.get('tool_description', 'Contrôle des appareils Tapo connectés')
         
         # Client API
         self.client = None
         
         if not self.email or not self.password:
             raise ValueError("Email et mot de passe Tapo requis")
+
+        # Mettre à jour le nom du tool depuis la config
+        self.name = self.tool_name
 
         # Mettre à jour le mappage des types d'appareils selon la configuration
         self._update_device_type_mapping()
@@ -279,7 +284,7 @@ class TapoAdapter(ToolAdapter):
 
     def _build_description(self) -> None:
         """Construit la description avec la liste des appareils disponibles"""
-        base_description = "Contrôle les appareils Tapo (prises, ampoules) - allumer, éteindre, changer couleurs"
+        base_description = self.tool_description
 
         if self.devices:
             device_list = []
