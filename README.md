@@ -1,35 +1,58 @@
+[![Python](https://img.shields.io/badge/python-3.11.4-blue.svg)](https://www.python.org/downloads/release/python-3114/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-blue.svg)](https://fastapi.tiangolo.com/)
+[![LlamaIndex](https://img.shields.io/badge/LlamaIndex-0.13.0%2B-yellow.svg)](https://www.llamaindex.ai/)
+[![PyYAML](https://img.shields.io/badge/PyYAML-6.0%2B-orange.svg)](https://pyyaml.org/)
+
 # GLaDOS Assistant Vocal
 
 **Assistant vocal intelligent et entièrement configurable basé sur ReAct de LlamaIndex**
 
 GLaDOS est un assistant vocal modulaire qui peut être contrôlé par wake word, terminal ou Discord, et qui peut répondre via TTS (voix GLaDOS) ou terminal. Il utilise une architecture basée sur des design patterns robustes et peut être étendu facilement avec de nouveaux outils et modules.
 
-## 🚀 Fonctionnalités
+## Technologies utilisées
+
+- Python 3.11.4
+- FastAPI
+- Porcupine (wake word)
+- Vosk (STT)
+- Piper TTS
+- LlamaIndex
+- Discord.py (prévu)
+- PyYAML
+- pytest
+
+## Fonctionnalités
 
 ### Modules d'Entrée (Input)
-- **Wake Word + STT** : Détection de wake word avec Porcupine et reconnaissance vocale avec Vosk
-- **Interface Web** : Interface web locale avec FastAPI et WebSockets
-- **Terminal** : Interface en ligne de commande interactive
-- **Discord** : Bot Discord (prévu)
 
-### Modules de Sortie (Output)  
-- **TTS GLaDOS** : Synthèse vocale avec la voix GLaDOS via Piper TTS
-- **Terminal** : Affichage formaté dans le terminal
+- Wake Word + STT : Détection de wake word avec Porcupine et reconnaissance vocale avec Vosk
+- Interface Web : Interface web locale avec FastAPI et WebSockets
+- Terminal : Interface en ligne de commande interactive
+- Discord : Bot Discord (prévu)
+
+### Modules de Sortie (Output)
+
+- TTS GLaDOS : Synthèse vocale avec la voix GLaDOS via Piper TTS
+- Terminal : Affichage formaté dans le terminal
 
 ### Outils Intégrés
-- **Contrôle Tapo** : Gestion des appareils TP-Link (prises, ampoules)
-- **Contrôle IR** : Contrôle infrarouge (prévu)
+
+- Contrôle Tapo : Gestion des appareils TP-Link (prises, ampoules)
+- Contrôle IR : Contrôle infrarouge (prévu)
 
 ### Architecture
-- **Moteur ReAct** : Intelligence basée sur LlamaIndex
-- **Design Patterns** : Factory, Command, Observer, Strategy, Adapter
-- **Configuration** : Système de configuration YAML flexible
-- **Modularité** : Architecture complètement modulaire et extensible
 
-## 📦 Installation
+- Moteur ReAct : Intelligence basée sur LlamaIndex
+- Design Patterns : Factory, Command, Observer, Strategy, Adapter
+- Configuration : Système de configuration YAML flexible
+- Modularité : Architecture complètement modulaire et extensible
+
+## Installation
 
 ### Prérequis
-- Python 3.8+
+
+- Python 3.11.4
 - Clé API OpenAI
 - Clé d'accès Porcupine (pour le wake word)
 - Modèle Vosk FR (pour STT)
@@ -54,12 +77,14 @@ pip install -r requirements.txt
 
 ### Configuration
 
-1. **Copier le fichier de configuration exemple :**
+1. Copier le fichier de configuration exemple :
+
 ```bash
 cp .env.example .env
 ```
 
-2. **Remplir les variables d'environnement dans `.env` :**
+2. Remplir les variables d'environnement dans `.env` :
+
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
 PORCUPINE_ACCESS_KEY=your_porcupine_access_key_here
@@ -67,27 +92,29 @@ TAPO_EMAIL=your_tapo_email@example.com
 TAPO_PASSWORD=your_tapo_password_here
 ```
 
-3. **Adapter `config.yaml` selon vos besoins :**
+3. Adapter `config.yaml` selon vos besoins :
    - Configurer les appareils Tapo
    - Ajuster les paramètres audio
    - Activer/désactiver les modules
 
 ### Modèles requis
 
-1. **Modèle Vosk FR** (déjà inclus) :
+1. Modèle Vosk FR (déjà inclus) :
+
    - `vosk-model-small-fr-0.22/`
 
-2. **Modèle Piper GLaDOS** :
+2. Modèle Piper GLaDOS :
+
    ```bash
    # Télécharger depuis HuggingFace
    mkdir -p models
    # Télécharger fr_FR-glados-medium.onnx dans models/
    ```
 
-3. **Wake words Porcupine** (déjà inclus) :
+3. Wake words Porcupine (déjà inclus) :
    - `wake_words/glados_de_windows_v3_0_0.ppn`
 
-## 🎯 Utilisation
+## Utilisation
 
 ### Lancement rapide
 
@@ -95,7 +122,7 @@ TAPO_PASSWORD=your_tapo_password_here
 # Méthode 1 : Script de lancement
 python run_glados.py
 
-# Méthode 2 : Module Python  
+# Méthode 2 : Module Python
 python -m glados.main
 
 # Méthode 3 : Installation en mode développement
@@ -105,16 +132,18 @@ glados
 
 ### Modes d'interaction
 
-1. **Mode Terminal** :
+1. Mode Terminal :
+
    - Tapez vos commandes après le prompt `GLaDOS> `
    - Commandes spéciales : `help`, `history`, `clear`, `exit`
 
-2. **Mode Wake Word** :
+2. Mode Wake Word :
+
    - Dites le wake word configuré (par défaut détection du mot clé)
    - Parlez votre commande après le signal
    - GLaDOS répond vocalement
 
-3. **Interface Web** :
+3. Interface Web :
    - Ouvrez http://127.0.0.1:8080 dans votre navigateur
    - Interface moderne avec chat en temps réel
    - Actions rapides pour commandes fréquentes
@@ -125,7 +154,7 @@ glados
 ```bash
 # Contrôle des appareils
 "Allume la lampe de chambre"
-"Éteins la prise de chambre" 
+"Éteins la prise de chambre"
 "Change la couleur de la lampe en rouge"
 "Mets la luminosité à 50%"
 
@@ -135,7 +164,7 @@ glados
 "Raconte-moi une blague"
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 ### Structure du projet
 
@@ -143,7 +172,7 @@ glados
 POC_GLaDOS/
 ├── glados/                 # Package principal
 │   ├── core/              # Moteur ReAct et interfaces
-│   ├── config/            # Gestion configuration  
+│   ├── config/            # Gestion configuration
 │   ├── inputs/            # Modules d'entrée
 │   │   ├── wake_word/     # Wake word + STT
 │   │   ├── web/           # Interface web FastAPI
@@ -163,13 +192,13 @@ POC_GLaDOS/
 
 ### Design Patterns utilisés
 
-- **Factory Pattern** : Création des modules Input/Output
-- **Command Pattern** : Encapsulation des actions/outils  
-- **Observer Pattern** : Communication entre modules
-- **Strategy Pattern** : Stratégies TTS/STT
-- **Adapter Pattern** : Intégration des outils existants
+- Factory Pattern : Création des modules Input/Output
+- Command Pattern : Encapsulation des actions/outils
+- Observer Pattern : Communication entre modules
+- Strategy Pattern : Stratégies TTS/STT
+- Adapter Pattern : Intégration des outils existants
 
-## 🔧 Configuration
+## Configuration
 
 Le fichier `config.yaml` permet de configurer tous les aspects de GLaDOS :
 
@@ -206,7 +235,7 @@ tools:
         ip: "192.168.1.186"
 ```
 
-## 🛠️ Développement
+## Développement
 
 ### Ajouter un nouveau module d'entrée
 
@@ -216,7 +245,7 @@ tools:
 
 ### Ajouter un nouveau module de sortie
 
-1. Créer la classe héritant de `OutputModule` 
+1. Créer la classe héritant de `OutputModule`
 2. Implémenter les méthodes abstraites
 3. Enregistrer dans `output_registry.py`
 
@@ -226,7 +255,7 @@ tools:
 2. Définir le schéma des paramètres
 3. Enregistrer dans `tool_registry.py`
 
-## 🧪 Tests
+## Tests
 
 ```bash
 # Installer les dépendances de test
@@ -239,29 +268,29 @@ pytest tests/
 pytest --cov=glados tests/
 ```
 
-## 📋 TODO
+## TODO
 
-- [ ] Module Discord Input/Output
-- [ ] Contrôle infrarouge (Yamaha, Osram)
-- [ ] Interface web de configuration
-- [ ] API REST
-- [ ] Plugins système
-- [ ] Mode démon/service
-- [ ] Docker support
+- Module Discord Input/Output
+- Contrôle infrarouge (Yamaha, Osram)
+- Interface web de configuration
+- API REST
+- Plugins système
+- Mode démon/service
+- Docker support
 
-## 🤝 Contribution
+## Contribution
 
 1. Fork le projet
 2. Créer une branche feature (`git checkout -b feature/amazing-feature`)
 3. Commit les changements (`git commit -m 'Add amazing feature'`)
-4. Push sur la branche (`git push origin feature/amazing-feature`)  
+4. Push sur la branche (`git push origin feature/amazing-feature`)
 5. Ouvrir une Pull Request
 
-## 📄 Licence
+## Licence
 
 Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
-## 🙏 Remerciements
+## Remerciements
 
 - [LlamaIndex](https://www.llamaindex.ai/) pour le moteur ReAct
 - [Porcupine](https://picovoice.ai/platform/porcupine/) pour la détection de wake word
