@@ -142,16 +142,26 @@ tools:
   # Contrôle infrarouge OSRAM RGBW
   ir_osram:
     enabled: true
-    ir_pin: 18  # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    ir_pin: 18 # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
     tool_name: "control_osram_ir"
     tool_description: "Contrôle de l'ampoule OSRAM RGBW de la chambre par infrarouge"
 
   # Contrôle infrarouge Yamaha
   ir_yamaha:
     enabled: true
-    ir_pin: 18  # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    ir_pin: 18 # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
     tool_name: "control_yamaha_ir"
     tool_description: "Contrôle de l'amplificateur Yamaha RX-E600MK2 par infrarouge"
+
+  # Informations météorologiques
+  weather:
+    enabled: true
+    api_key: ${OPENWEATHERMAP_API_KEY}
+    default_city: "Paris"
+    default_units: "metric"
+    default_language: "fr"
+    tool_name: "get_weather"
+    tool_description: "Obtenir les informations météorologiques pour une ville donnée"
 
   # Contrôle infrarouge (legacy - à migrer)
   ir_control:

@@ -7,6 +7,7 @@ from ...core.factories import ToolAdapterFactory
 from ..tapo.tapo_adapter import TapoAdapter
 from ..ir_osram.ir_osram_adapter import IROsramAdapter
 from ..ir_yamaha.ir_yamaha_adapter import IRYamahaAdapter
+from ..weather.weather_adapter import WeatherAdapter
 
 
 def register_all_tools():
@@ -22,6 +23,9 @@ def register_all_tools():
 
     # Enregistrer l'adaptateur IR Yamaha
     ToolAdapterFactory.register('ir_yamaha', IRYamahaAdapter)
+
+    # Enregistrer l'adaptateur météo
+    ToolAdapterFactory.register('weather', WeatherAdapter)
     
     print(f"Outils enregistrés: {ToolAdapterFactory.get_available_types()}")
 
