@@ -67,22 +67,22 @@ inputs:
     enabled: true
     outputs: ["tts_glados", "terminal"] # Outputs à utiliser pour les réponses
     porcupine_access_key: ${PORCUPINE_ACCESS_KEY}
-    model_path: "wake_word_model/porcupine_params_de.pv"
-    keyword_paths: ["wake_words/glados_de_windows_v3_0_0.ppn"]
+    model_path: "models/wake_word_model/porcupine_params_de.pv"
+    keyword_paths: ["models/wake_words/glados_de_windows_v3_0_0.ppn"]
     stt:
-      model_path: "vosk-model-small-fr-0.22"
+      model_path: "models/vosk-model-small-fr-0.22"
       sample_rate: 16000
-      device_id: 1 # Réseau de microphones
+      device_id: 2 # Microphone sur card 2
       max_recording_duration: 8
       silence_threshold: 500
       min_silence_duration: 1.0
 
   # Interface Web locale
   web:
-    enabled: false
+    enabled: true
     outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
     host: "127.0.0.1" # Interface locale seulement
-    port: 8080
+    port: 8081
     title: "GLaDOS Assistant Web Interface"
     enable_cors: true # Pour le développement
 
@@ -109,8 +109,8 @@ outputs:
   # Text-to-Speech GLaDOS
   tts_glados:
     enabled: true
-    model_path: "models/fr_FR-glados-medium.onnx"
-    device_id: 5
+    model_path: "models/glados_tts/fr_FR-glados-medium.onnx"
+    device_id: 2 # Card 2 pour la sortie audio
     sample_rate: 22050
     volume: 1
 
@@ -162,17 +162,6 @@ tools:
     default_language: "fr"
     tool_name: "get_weather"
     tool_description: "Obtenir les informations météorologiques pour une ville donnée"
-
-  # Contrôle infrarouge (legacy - à migrer)
-  ir_control:
-    enabled: false
-    devices:
-      yamaha_amplifier:
-        type: "yamaha"
-        commands: ["power_on", "power_off", "volume_up", "volume_down"]
-      osram_light:
-        type: "osram"
-        commands: ["toggle", "dim_up", "dim_down"]
 
 # Logging et debug
 logging:

@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  glados:
+    build: .
+    container_name: glados-assistant
+
+    # Variables d'environnement depuis .env
+    env_file: .env
+
+    # Accès complet aux périphériques (simple et efficace)
+    privileged: true
+
+    # Réseau host pour découverte Tapo
+    network_mode: "host"
+
+    # Montage des périphériques
+    volumes:
+      - /dev:/dev
+      - /var/run/pulse:/var/run/pulse:ro
+      - /dev/shm:/dev/shm
+
+    # Redémarrage automatique
+    restart: unless-stopped
+
+    # Groupes système
+    group_add:
+      - audio
+      - gpio

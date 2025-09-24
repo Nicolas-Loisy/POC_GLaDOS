@@ -99,6 +99,18 @@ TAPO_PASSWORD=your_tapo_password_here
 
 ### Modèles requis
 
+Décompressez l’archive `models.zip` et placez le dossier `models` à la racine du projet (`POC_GLaDOS/`).  
+Assurez-vous que la structure soit la suivante :
+
+```
+POC_GLaDOS/
+├── models/
+│   ├── glados_tts
+│   ├── vosk-model-small-fr-O.22
+│   ├── wake_word_model
+│   └── wake_words
+```
+
 1. Modèle Vosk FR (déjà inclus) :
 
    - `vosk-model-small-fr-0.22/`
