@@ -88,19 +88,27 @@ class WakeWordInput(InputModule):
         """Callback pour le stream audio"""
         if status:
             self.logger.warning(f"Audio callback status: {status}")
-        self.audio_queue.put(indata.copy())
+
+        # Vérifier que la queue existe
+        if self.audio_queue is not None:
+            self.audio_queue.put(indata.copy())
     
     async def start_listening(self) -> None:
         """Démarre l'écoute du wake word"""
         if self.listening_for_wake_word:
             self.logger.warning("Wake Word déjà en écoute")
             return
-        
+
         try:
             self.logger.info("Démarrage de l'écoute wake word...")
+
+            # Debug: lister les périphériques audio disponibles
+            self._log_audio_devices()
+
             self.listening_for_wake_word = True
-            
+
             # Démarrer le stream audio
+            self.logger.info(f"Tentative d'ouverture du périphérique audio {self.device_id}")
             self.stream = sd.InputStream(
                 channels=1,
                 samplerate=self.sample_rate,
@@ -109,16 +117,27 @@ class WakeWordInput(InputModule):
                 device=self.device_id
             )
             self.stream.start()
-            
+            self.logger.info("Stream audio démarré avec succès")
+
             # Démarrer la tâche de traitement audio
             self.audio_task = asyncio.create_task(self._process_audio())
-            
+
             await self.emit_event(GLaDOSEvent('wake_word_listening_started', source=self.name))
             self.logger.info("Wake Word en écoute")
-            
+
         except Exception as e:
             self.logger.error(f"Erreur démarrage wake word: {e}")
             self.listening_for_wake_word = False
+
+            # Essayer avec le périphérique par défaut
+            if self.device_id is not None:
+                self.logger.info("Tentative avec le périphérique audio par défaut")
+                try:
+                    self.device_id = None  # Utiliser le périphérique par défaut
+                    await self.start_listening()  # Récursion avec device_id=None
+                    return
+                except Exception as fallback_error:
+                    self.logger.error(f"Erreur avec périphérique par défaut: {fallback_error}")
     
     async def stop_listening(self) -> None:
         """Arrête l'écoute du wake word"""
@@ -337,3 +356,22 @@ class WakeWordInput(InputModule):
             self.audio_queue = None
         
         self.logger.info("Module Wake Word nettoyé")
+
+    def _log_audio_devices(self) -> None:
+        """Affiche les périphériques audio disponibles pour debug"""
+        try:
+            self.logger.info("=== Périphériques audio disponibles ===")
+            devices = sd.query_devices()
+            for i, device in enumerate(devices):
+                device_type = "INPUT" if device['max_input_channels'] > 0 else "OUTPUT"
+                self.logger.info(f"Device {i}: {device['name']} ({device_type}) - {device['hostapi']}")
+
+            # Afficher le périphérique par défaut
+            default_input = sd.query_devices(kind='input')
+            default_output = sd.query_devices(kind='output')
+            self.logger.info(f"Périphérique INPUT par défaut: {default_input['name']} (index: {sd.default.device[0]})")
+            self.logger.info(f"Périphérique OUTPUT par défaut: {default_output['name']} (index: {sd.default.device[1]})")
+            self.logger.info("=== Fin liste périphériques ===")
+
+        except Exception as e:
+            self.logger.error(f"Erreur listing périphériques audio: {e}")

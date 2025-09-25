@@ -310,6 +310,16 @@ class GLaDOSTTSOutput(OutputModule):
                 except Exception as e:
                     self.logger.warning(f"Device {device_id} non disponible, utilisation du device par défaut. Erreur: {e}")
                     device_id = None
+                # Resampling si nécessaire
+                target_sample_rate = self.sample_rate
+                if sample_rate != target_sample_rate:
+                    self.logger.info(f"Resampling de {sample_rate} Hz vers {target_sample_rate} Hz")
+                    # Simple resampling linéaire
+                    import scipy.signal
+                    num_samples = int(len(audio_data) * target_sample_rate / sample_rate)
+                    audio_data = scipy.signal.resample(audio_data, num_samples)
+                    sample_rate = target_sample_rate
+
                 # Jouer l'audio
                 sd.play(audio_data, samplerate=sample_rate, device=device_id)
                 sd.wait()  # Attendre la fin de la lecture

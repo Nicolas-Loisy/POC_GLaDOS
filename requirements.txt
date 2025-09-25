@@ -8,6 +8,7 @@ pvporcupine
 vosk
 piper-tts
 numpy
+scipy
 
 # Web interface
 fastapi
