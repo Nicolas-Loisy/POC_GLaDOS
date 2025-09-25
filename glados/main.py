@@ -1,22 +1,4 @@
 
-async def trigger_reload():
-    """
-    Recharge la configuration et réinitialise le moteur GLaDOS à chaud
-    """
-    global _global_app_instance
-    if _global_app_instance is None:
-        raise RuntimeError("Aucune instance GLaDOS active")
-    # Arrêter le moteur
-    if _global_app_instance.engine:
-        await _global_app_instance.engine.stop()
-    # Recharger la config
-    config = _global_app_instance.config_manager.reload_config("config.yaml")
-    # Réinitialiser le moteur
-    _global_app_instance.engine = GLaDOSReActEngine(config)
-    await _global_app_instance.engine.initialize()
-    # Redémarrer le moteur
-    await _global_app_instance.engine.start()
-    return True
 """
 Application principale GLaDOS
 Point d'entrée principal pour l'assistant vocal
@@ -80,8 +62,7 @@ class GLaDOSApplication:
             self._setup_signal_handlers()
 
             # Enregistrer l'instance globale pour reload
-            global _global_app_instance
-            _global_app_instance = self
+            set_global_instance(self)
             
             self.logger.info("GLaDOS initialisé avec succès!")
             return True
@@ -181,6 +162,59 @@ class GLaDOSApplication:
 
 # Déclaration globale après la classe pour éviter l'erreur
 _global_app_instance: Optional[GLaDOSApplication] = None
+
+
+def get_global_instance():
+    """Retourne l'instance globale GLaDOS ou None"""
+    return _global_app_instance
+
+
+def set_global_instance(instance: GLaDOSApplication):
+    """Définit l'instance globale GLaDOS"""
+    global _global_app_instance
+    _global_app_instance = instance
+
+
+async def trigger_reload():
+    """
+    Recharge la configuration et réinitialise le moteur GLaDOS à chaud
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    global _global_app_instance
+    if _global_app_instance is None:
+        logger.error("Aucune instance GLaDOS active pour le reload")
+        raise RuntimeError("Aucune instance GLaDOS active")
+
+    try:
+        logger.info("Début du rechargement de GLaDOS")
+
+        # Arrêter le moteur
+        if _global_app_instance.engine:
+            logger.info("Arrêt du moteur existant")
+            await _global_app_instance.engine.stop()
+
+        # Recharger la config
+        logger.info("Rechargement de la configuration")
+        config = _global_app_instance.config_manager.reload_config("config.yaml")
+
+        # Réinitialiser le moteur
+        logger.info("Réinitialisation du moteur")
+        from .core.react_engine import GLaDOSReActEngine
+        _global_app_instance.engine = GLaDOSReActEngine(config)
+        await _global_app_instance.engine.initialize()
+
+        # Redémarrer le moteur
+        logger.info("Redémarrage du moteur")
+        await _global_app_instance.engine.start()
+
+        logger.info("Rechargement terminé avec succès")
+        return True
+
+    except Exception as e:
+        logger.error(f"Erreur lors du rechargement: {e}", exc_info=True)
+        raise
 
 
 def setup_logging(level: str = "INFO") -> None:

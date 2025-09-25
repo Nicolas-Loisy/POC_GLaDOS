@@ -90,10 +90,23 @@ class WebInput(InputModule):
 
         @self.app.get("/api/status")
         async def get_status():
+            # Diagnostic GLaDOS
+            from glados.main import get_global_instance
+            global_instance = get_global_instance()
+
             return {
                 "status": "active" if self.is_active else "inactive",
-                "connections": len(self.websocket_connections)
+                "connections": len(self.websocket_connections),
+                "glados_instance_available": global_instance is not None,
+                "glados_instance_type": type(global_instance).__name__ if global_instance else None,
+                "parent_engine_available": hasattr(self, 'parent_engine') and self.parent_engine is not None,
+                "diagnostics": self._get_glados_diagnostics()
             }
+
+        @self.app.get("/api/diagnostics")
+        async def get_diagnostics():
+            """Diagnostic complet de l'état GLaDOS"""
+            return {"diagnostics": self._get_glados_diagnostics()}
 
         @self.app.post("/api/test")
         async def test_message():
@@ -121,13 +134,67 @@ class WebInput(InputModule):
         @self.app.post("/api/reload")
         async def reload_project():
             """Déclenche la réinitialisation du projet (reload config + modules)"""
-            # On utilise un event ou callback à connecter côté moteur
             try:
-                # Appel à une méthode globale (à connecter)
+                self.logger.info("Rechargement du projet demandé via API")
+
+                # Essayer de trouver l'instance GLaDOS
+                glados_instance = None
+
+                # Méthode 1: Instance globale
+                from glados.main import get_global_instance
+                glados_instance = get_global_instance()
+
+                # Méthode 2: Via le parent engine (si disponible)
+                if glados_instance is None and hasattr(self, 'parent_engine'):
+                    # Chercher l'instance dans le parent engine
+                    parent = self.parent_engine
+                    while parent and not hasattr(parent, 'application'):
+                        parent = getattr(parent, 'parent', None)
+                    if parent and hasattr(parent, 'application'):
+                        glados_instance = parent.application
+                        # L'enregistrer comme instance globale
+                        from glados.main import set_global_instance
+                        set_global_instance(glados_instance)
+
+                if glados_instance is None:
+                    # Solution de secours: redémarrage via signal
+                    self.logger.warning("Instance GLaDOS non disponible - tentative de redémarrage via signal")
+                    try:
+                        import os
+                        import signal
+
+                        # Envoyer SIGUSR1 au processus principal pour déclencher un reload
+                        # (nécessite d'ajouter un handler dans main.py)
+                        if os.path.exists('/.dockerenv'):
+                            # Dans Docker, forcer l'arrêt pour que Docker Compose redémarre
+                            self.logger.info("Arrêt forcé du container pour redémarrage")
+
+                            # Programmer l'arrêt après avoir envoyé la réponse
+                            import asyncio
+                            async def delayed_exit():
+                                await asyncio.sleep(1)  # Laisser le temps de renvoyer la réponse
+                                self.logger.info("Arrêt du processus Python pour redémarrage Docker")
+                                os._exit(1)  # Exit code 1 pour déclencher restart policy
+
+                            # Lancer l'arrêt en arrière-plan
+                            asyncio.create_task(delayed_exit())
+
+                            return {"success": True, "message": "Redémarrage en cours - GLaDOS va redémarrer dans 1 seconde"}
+                        else:
+                            raise HTTPException(status_code=503, detail="Service GLaDOS non disponible. Vérifiez que GLaDOS est correctement démarré via main.py")
+                    except Exception as fallback_error:
+                        self.logger.error(f"Erreur fallback reload: {fallback_error}")
+                        raise HTTPException(status_code=503, detail="Service GLaDOS non disponible. Vérifiez que GLaDOS est correctement démarré via main.py")
+
+                # Appel à la méthode de rechargement
                 from glados.main import trigger_reload
                 await trigger_reload()
-                return {"success": True}
+                return {"success": True, "message": "Rechargement effectué"}
+
+            except HTTPException:
+                raise
             except Exception as e:
+                self.logger.error(f"Erreur reload: {e}", exc_info=True)
                 raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.websocket("/ws")
@@ -258,3 +325,52 @@ class WebInput(InputModule):
                 "timestamp": datetime.now().isoformat()
             }
             await self.broadcast_to_websockets(message)
+
+    def _get_glados_diagnostics(self):
+        """Diagnostic complet de GLaDOS"""
+        import sys
+        import os
+
+        # Vérifier l'instance globale
+        from glados.main import get_global_instance
+        global_instance = get_global_instance()
+
+        # Vérifier les modules importés
+        glados_modules = [name for name in sys.modules.keys() if name.startswith('glados')]
+
+        # Vérifier les variables d'environnement
+        env_vars = {k: v for k, v in os.environ.items() if 'GLADOS' in k.upper()}
+
+        # Vérifier si on est dans Docker
+        in_docker = os.path.exists('/.dockerenv')
+
+        # Vérifier le fichier de config
+        config_exists = os.path.exists('config.yaml')
+
+        diagnostics = {
+            "global_instance": {
+                "available": global_instance is not None,
+                "type": type(global_instance).__name__ if global_instance else None,
+                "initialized": global_instance.is_running if global_instance else False
+            },
+            "module_info": {
+                "parent_engine": hasattr(self, 'parent_engine'),
+                "parent_engine_type": type(getattr(self, 'parent_engine', None)).__name__ if hasattr(self, 'parent_engine') else None,
+                "loaded_glados_modules": len(glados_modules),
+                "modules": glados_modules[:10]  # Limiter pour éviter trop de données
+            },
+            "environment": {
+                "in_docker": in_docker,
+                "config_exists": config_exists,
+                "env_vars": env_vars,
+                "python_path": sys.path[:5]  # Premier éléments du path
+            },
+            "web_input": {
+                "name": self.name,
+                "is_active": self.is_active,
+                "host": self.host,
+                "port": self.port
+            }
+        }
+
+        return diagnostics
