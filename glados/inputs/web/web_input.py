@@ -45,6 +45,7 @@ class WebInput(InputModule):
         # Ressources
         self.app = None
         self.server_thread = None
+        self.uvicorn_server = None
         self.websocket_connections: Set[WebSocket] = set()
         self.templates_dir = Path(__file__).parent / "templates"
         self.static_dir = Path(__file__).parent / "static"
@@ -78,6 +79,10 @@ class WebInput(InputModule):
         async def get_interface():
             return FileResponse(self.templates_dir / "index.html")
 
+        @self.app.get("/config", response_class=HTMLResponse)
+        async def get_config_page():
+            return FileResponse(self.templates_dir / "config.html")
+
         @self.app.post("/api/message")
         async def send_message(request: MessageRequest):
             await self._send_message(request.message)
@@ -94,6 +99,36 @@ class WebInput(InputModule):
         async def test_message():
             await self._send_message("Test de l'interface web")
             return {"success": True, "message": "Test envoyé"}
+
+        @self.app.get("/api/config")
+        async def get_config():
+            """Retourne le contenu du fichier de config YAML"""
+            config_path = Path("config.yaml")
+            if not config_path.exists():
+                raise HTTPException(status_code=404, detail="Fichier de configuration introuvable")
+            with open(config_path, "r", encoding="utf-8") as f:
+                return {"content": f.read()}
+
+        @self.app.post("/api/config")
+        async def save_config(data: Dict[str, Any]):
+            """Sauvegarde le contenu du fichier de config YAML"""
+            config_path = Path("config.yaml")
+            content = data.get("content", "")
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return {"success": True}
+
+        @self.app.post("/api/reload")
+        async def reload_project():
+            """Déclenche la réinitialisation du projet (reload config + modules)"""
+            # On utilise un event ou callback à connecter côté moteur
+            try:
+                # Appel à une méthode globale (à connecter)
+                from glados.main import trigger_reload
+                await trigger_reload()
+                return {"success": True}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
@@ -175,33 +210,36 @@ class WebInput(InputModule):
     
     
     async def start_listening(self) -> None:
-        """Démarre le serveur web"""
+        """Démarre le serveur web avec Uvicorn en mode programme"""
         if not self.app:
             return
 
-        try:
-            self.server_thread = Thread(target=self._run_server, daemon=True)
-            self.server_thread.start()
-            await asyncio.sleep(1)
-            self.logger.info(f"Interface web disponible sur http://{self.host}:{self.port}")
-        except Exception as e:
-            self.logger.error(f"Erreur démarrage serveur: {e}")
+        if self.uvicorn_server and not self.uvicorn_server.should_exit:
+            self.logger.info("Serveur web déjà lancé.")
+            return
+
+        import uvicorn
+        config = uvicorn.Config(self.app, host=self.host, port=self.port, log_level="warning")
+        self.uvicorn_server = uvicorn.Server(config)
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.uvicorn_server.serve())
+        await asyncio.sleep(1)
+        self.logger.info(f"Interface web disponible sur http://{self.host}:{self.port}")
 
     def _run_server(self):
-        """Exécute le serveur Uvicorn"""
-        try:
-            uvicorn.run(self.app, host=self.host, port=self.port, log_level="warning")
-        except Exception as e:
-            self.logger.error(f"Erreur serveur: {e}")
+        pass  # Obsolète avec le mode programme
 
     async def stop_listening(self) -> None:
-        """Arrête le serveur web"""
+        """Arrête le serveur web et Uvicorn proprement"""
         for websocket in list(self.websocket_connections):
             try:
                 await websocket.close()
             except:
                 pass
         self.websocket_connections.clear()
+        if self.uvicorn_server and not self.uvicorn_server.should_exit:
+            self.logger.info("Arrêt du serveur Uvicorn...")
+            self.uvicorn_server.should_exit = True
 
     async def cleanup(self) -> None:
         """Nettoie les ressources"""

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Configuration GLaDOS</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root {
+            --bg-page: #181a20;
+            --panel: #23262e;
+            --muted: #e0e0e0;
+            --accent: #ffb86c;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            background: var(--bg-page);
+            color: var(--muted);
+            font-family: 'Segoe UI', Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            box-sizing: border-box;
+        }
+
+        header {
+            width: 100%;
+            padding: 10px 10px;
+            box-sizing: border-box;
+            text-align: center; /* ✅ Centré */
+        }
+        header h1 {
+            margin: 0;
+            color: var(--accent);
+            font-size: 1.8rem;
+        }
+
+        .container {
+            width: 100%;
+            padding: 16px 24px 40px;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            background: var(--panel);
+            border-radius: 12px;
+            box-shadow: 0 2px 16px #000a;
+            padding: 20px;
+            box-sizing: border-box;
+            width: 100%; /* ✅ Pleine largeur */
+        }
+
+        textarea {
+            display: block;
+            width: 100%; /* ✅ Pleine largeur */
+            min-height: 70vh;
+            background: var(--bg-page);
+            color: var(--muted);
+            border: 1px solid #444;
+            border-radius: 8px;
+            font-size: 1rem;
+            padding: 14px;
+            margin-bottom: 20px;
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        .actions {
+            display: flex;
+            flex-direction: row; /* ✅ Boutons en ligne */
+            gap: 12px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        button {
+            background: var(--accent);
+            color: #23262e;
+            border: none;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 700;
+            transition: background 0.18s ease;
+            width: 20%; /* ✅ Boutons 10% largeur */
+        }
+        button:hover { background: #ff9f43; }
+
+        .status {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 1rem;
+            min-height: 1.2em;
+        }
+        .status.success { color: #50fa7b; }
+        .status.error   { color: #ff5555; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Configuration GLaDOS</h1>
+    </header>
+
+    <div class="container">
+        <div class="panel">
+            <textarea id="configArea" spellcheck="false" placeholder="Chargement..."></textarea>
+
+            <div class="actions">
+                <button id="saveBtn">Sauvegarder</button>
+                <button id="reloadBtn">Recharger le projet</button>
+            </div>
+
+            <div class="status" id="statusMsg"></div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchConfig() {
+            try {
+                const res = await fetch('/api/config');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('configArea').value = data.content ?? '';
+                    showStatus('', false);
+                } else {
+                    showStatus('Impossible de charger la configuration', true);
+                }
+            } catch (e) {
+                showStatus('Impossible de charger la configuration', true);
+                console.error(e);
+            }
+        }
+
+        async function saveConfig() {
+            const content = document.getElementById('configArea').value;
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (res.ok) {
+                    showStatus('Configuration sauvegardée', false);
+                } else {
+                    showStatus('Erreur lors de la sauvegarde', true);
+                }
+            } catch (e) {
+                showStatus('Erreur lors de la sauvegarde', true);
+                console.error(e);
+            }
+        }
+
+        async function reloadProject() {
+            try {
+                const res = await fetch('/api/reload', { method: 'POST' });
+                if (res.ok) {
+                    showStatus('Projet rechargé avec succès', false);
+                } else {
+                    showStatus('Erreur lors du rechargement', true);
+                }
+            } catch (e) {
+                showStatus('Erreur lors du rechargement', true);
+                console.error(e);
+            }
+        }
+
+        function showStatus(msg, isError) {
+            const el = document.getElementById('statusMsg');
+            el.textContent = msg;
+            el.className = isError ? 'status error' : (msg ? 'status success' : 'status');
+        }
+
+        document.getElementById('saveBtn').addEventListener('click', saveConfig);
+        document.getElementById('reloadBtn').addEventListener('click', reloadProject);
+        window.addEventListener('load', fetchConfig);
+    </script>
+</body>
+</html>

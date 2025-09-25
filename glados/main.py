@@ -1,3 +1,22 @@
+
+async def trigger_reload():
+    """
+    Recharge la configuration et réinitialise le moteur GLaDOS à chaud
+    """
+    global _global_app_instance
+    if _global_app_instance is None:
+        raise RuntimeError("Aucune instance GLaDOS active")
+    # Arrêter le moteur
+    if _global_app_instance.engine:
+        await _global_app_instance.engine.stop()
+    # Recharger la config
+    config = _global_app_instance.config_manager.reload_config("config.yaml")
+    # Réinitialiser le moteur
+    _global_app_instance.engine = GLaDOSReActEngine(config)
+    await _global_app_instance.engine.initialize()
+    # Redémarrer le moteur
+    await _global_app_instance.engine.start()
+    return True
 """
 Application principale GLaDOS
 Point d'entrée principal pour l'assistant vocal
@@ -59,6 +78,10 @@ class GLaDOSApplication:
             
             # 4. Configurer les gestionnaires de signaux
             self._setup_signal_handlers()
+
+            # Enregistrer l'instance globale pour reload
+            global _global_app_instance
+            _global_app_instance = self
             
             self.logger.info("GLaDOS initialisé avec succès!")
             return True
@@ -154,6 +177,10 @@ class GLaDOSApplication:
     def is_active(self) -> bool:
         """Retourne l'état de l'application"""
         return self.is_running
+
+
+# Déclaration globale après la classe pour éviter l'erreur
+_global_app_instance: Optional[GLaDOSApplication] = None
 
 
 def setup_logging(level: str = "INFO") -> None:
