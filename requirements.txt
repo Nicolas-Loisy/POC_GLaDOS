@@ -5,6 +5,7 @@ llama-index-llms-openai
 # Audio processing
 sounddevice
 pvporcupine
+pvrecorder
 vosk
 piper-tts
 numpy

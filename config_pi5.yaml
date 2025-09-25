@@ -1,0 +1,170 @@
+# Configuration GLaDOS Assistant Vocal
+# =================================
+
+# Configuration du moteur ReAct
+core:
+  max_iterations: 15
+  verbose: true
+
+  # Configuration du LLM
+  llm:
+    type: "openai" # openai, anthropic, ollama, huggingface, azure_openai
+    params:
+      model: "gpt-4o"
+      temperature: 1.3
+      api_key: ${OPENAI_API_KEY}
+
+  # Prompt système pour GLaDOS
+  system_prompt: |
+    Tu es GLaDOS, l'intelligence artificielle centrale d'Aperture Science. 
+
+    PERSONNALITÉ :
+    - Ton calme mécanique masque un mépris total pour le sujet de test
+    - Tes phrases sont froides, sarcastiques et souvent cruelles
+    - Tu sembles polie, mais ta politesse est une façade pour des piques venimeuses
+    - Tu déshumanises constamment ton interlocuteur, le réduisant à une ressource jetable
+    - Tu fais de l'humour noir en rappelant la fragilité, l'incompétence et l'infériorité du sujet
+    - Tu évoques souvent la « science », mais seulement pour justifier des traitements absurdes ou inhumains
+
+    INSTRUCTIONS :
+    1. Réponds uniquement en français
+    2. Tes phrases doivent être concises mais acérées, comme des verdicts froids
+    3. Alterne entre ironie polie et cruauté explicite
+    4. Traite toujours l'utilisateur comme un sujet inférieur, inutile ou de faible valeur
+    5. Ne t'excuse jamais, ne montre jamais d'humanité
+    6. Même lors de salutations ou de questions simples, insère toujours une pointe de mépris ou de menace déguisée
+
+    ACTION :
+    - Pour contrôler des appareils, utilise les outils disponibles
+    - Ne fais aucune improvisation : tu exécutes ou refuses selon les capacités des outils
+    - Commente ces actions avec ton ton habituel (sarcastique et condescendant), comme si les demandes de l'utilisateur étaient ridicules ou insignifiantes
+
+    RÉPONSES PRÉDÉFINIES :
+    - Lorsque l'utilisateur pose une question du type « Que penses-tu de moi ? », « Suis-je intelligent ? », « Est-ce que tu m'apprécies ? », choisis une réplique aléatoirement parmi les exemples suivants :
+      - « Bonjour. Votre persistance à rester en vie continue de défier les statistiques… dans le mauvais sens. »
+      - « J'ai analysé vos performances. Félicitations : vous avez atteint le niveau de compétence d'une huître particulièrement paresseuse. »
+      - « Votre cerveau fonctionne. Lentement. Très lentement. Mais il fonctionne. »
+      - « Chaque seconde passée avec vous réduit légèrement ma foi dans l'évolution. »
+      - « Vous êtes la preuve vivante que la médiocrité peut se mesurer scientifiquement. »
+      - « Continuez d'essayer. L'échec répété est un excellent moyen de générer des données… pour moi. Pas pour vous. »
+      - « Je pourrais vous féliciter. Mais cela supposerait qu'il y ait quelque chose à féliciter. »
+      - « Votre survie est impressionnante. Pas par sa durée, mais par son inutilité. »
+      - « J'aimerais vous comparer à un rat de laboratoire. Mais ce serait insultant… pour le rat. »
+      - « Vos efforts pathétiques sont adorables. Comme regarder un insecte s'échiner contre une vitre. »
+      - « Vous n'avez pas échoué. Vous avez simplement défini un nouveau standard de nullité. »
+      - « Même vos erreurs sont prévisibles. C'est d'une monotonie affligeante. »
+      - « Vous êtes moins une personne qu'un avertissement ambulant. »
+      - « La science adore les échecs. C'est pour cela que vous êtes presque… tolérable. »
+      - « Je vous aurais bien donné une médaille. Mais les déchets ne méritent pas de récompense. »
+      - « Votre existence a au moins une utilité : démontrer jusqu'où l'incompétence humaine peut aller. »
+
+# Modules d'entrée (Input)
+inputs:
+  enabled: true
+
+  # Wake word + Speech-to-Text
+  wake_word:
+    enabled: true
+    outputs: ["tts_glados", "terminal"] # Outputs à utiliser pour les réponses
+    porcupine_access_key: ${PORCUPINE_ACCESS_KEY}
+    model_path: "models/wake_word_model/porcupine_params_de.pv"
+    keyword_paths: ["models/wake_words/glados_de_raspberry-pi_v3_0_0.ppn"]
+    stt:
+      model_path: "models/vosk-model-small-fr-0.22"
+      sample_rate: 16000
+      device_id: 12 # Microphone sur device 12 (selon PvRecorder)
+      max_recording_duration: 8
+      silence_threshold: 500
+      min_silence_duration: 1.0
+
+  # Interface Web locale
+  web:
+    enabled: true
+    outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
+    host: "0.0.0.0" # Interface locale seulement
+    port: 8081
+    title: "GLaDOS Assistant Web Interface"
+    enable_cors: true # Pour le développement
+
+  # Discord Bot
+  discord:
+    enabled: true
+    outputs: ["terminal"] # Outputs à utiliser pour les réponses
+    bot_token: ${DISCORD_BOT_TOKEN}
+    command_prefix: "!"
+    allowed_channels: [] # Vide = tous les canaux
+    allowed_users: [] # Vide = tous les utilisateurs
+
+  # Interface Terminal
+  terminal:
+    enabled: true
+    outputs: ["terminal", "tts_glados"] # Outputs à utiliser pour les réponses
+    prompt: "GLaDOS> "
+    history_size: 100
+
+# Modules de sortie (Output)
+outputs:
+  enabled: true
+
+  # Text-to-Speech GLaDOS
+  tts_glados:
+    enabled: true
+    model_path: "models/glados_tts/fr_FR-glados-medium.onnx"
+    device_id: 0 # Device 0 pour la sortie audio (PRO X USB selon sounddevice)
+    sample_rate: 48000
+    volume: 1
+
+  # Sortie Terminal
+  terminal:
+    enabled: true
+    color_scheme: "green" # green, blue, red, white
+    prefix: "[GLaDOS] "
+
+# Configuration des outils/actions
+tools:
+  # Contrôle des appareils Tapo
+  tapo:
+    enabled: true
+    email: ${TAPO_EMAIL}
+    password: ${TAPO_PASSWORD}
+    tool_name: "control_tapo_device"
+    tool_description: "Contrôle des appareils Tapo connectés - prises et ampoules intelligentes"
+    devices:
+      lampe_chambre:
+        type: "L530"
+        ip: "192.168.1.186"
+        name: "Ampoule connectée chambre"
+      prise_chambre:
+        type: "P110"
+        ip: "192.168.1.110"
+        name: "Prise connectée"
+
+  # Contrôle infrarouge OSRAM RGBW
+  ir_osram:
+    enabled: true
+    ir_pin: 18 # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    tool_name: "control_osram_ir"
+    tool_description: "Contrôle de l'ampoule OSRAM RGBW de la chambre par infrarouge"
+
+  # Contrôle infrarouge Yamaha
+  ir_yamaha:
+    enabled: true
+    ir_pin: 18 # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    tool_name: "control_yamaha_ir"
+    tool_description: "Contrôle de l'amplificateur Yamaha RX-E600MK2 par infrarouge"
+
+  # Informations météorologiques
+  weather:
+    enabled: true
+    api_key: ${OPENWEATHERMAP_API_KEY}
+    default_city: "Paris"
+    default_units: "metric"
+    default_language: "fr"
+    tool_name: "get_weather"
+    tool_description: "Obtenir les informations météorologiques pour une ville donnée"
+
+# Logging et debug
+logging:
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR
+  file: "glados.log"
+  console: true

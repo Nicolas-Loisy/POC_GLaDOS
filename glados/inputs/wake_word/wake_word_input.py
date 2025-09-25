@@ -7,8 +7,8 @@ import asyncio
 import queue
 import json
 import numpy as np
-import sounddevice as sd
 import pvporcupine
+from pvrecorder import PvRecorder
 from vosk import Model, KaldiRecognizer
 import logging
 from typing import Dict, Any
@@ -43,10 +43,10 @@ class WakeWordInput(InputModule):
         
         # Composants audio
         self.porcupine = None
+        self.recorder = None
         self.vosk_model = None
         self.recognizer = None
         self.audio_queue = None
-        self.stream = None
         
         # État
         self.listening_for_wake_word = False
@@ -60,38 +60,60 @@ class WakeWordInput(InputModule):
         """Initialise les composants de reconnaissance vocale"""
         try:
             self.logger.info("Initialisation du module Wake Word...")
-            
+
+            # Diagnostics détaillés
+            self.logger.info(f"Clé d'accès Porcupine: {'*' * (len(self.porcupine_access_key) - 4) + self.porcupine_access_key[-4:] if self.porcupine_access_key else 'MANQUANTE'}")
+            self.logger.info(f"Chemin modèle: {self.model_path}")
+            self.logger.info(f"Chemins wake words: {self.keyword_paths}")
+
+            # Vérifier l'existence des fichiers
+            import os
+            for path in self.keyword_paths:
+                abs_path = os.path.abspath(path)
+                exists = os.path.exists(abs_path)
+                size = os.path.getsize(abs_path) if exists else 0
+                self.logger.info(f"Fichier wake word: {abs_path} - Existe: {exists} - Taille: {size} octets")
+
+            model_abs_path = os.path.abspath(self.model_path)
+            model_exists = os.path.exists(model_abs_path)
+            model_size = os.path.getsize(model_abs_path) if model_exists else 0
+            self.logger.info(f"Fichier modèle: {model_abs_path} - Existe: {model_exists} - Taille: {model_size} octets")
+
             # Initialiser Porcupine
+            self.logger.info("Tentative d'initialisation de Porcupine...")
             self.porcupine = pvporcupine.create(
                 access_key=self.porcupine_access_key,
                 model_path=self.model_path,
                 keyword_paths=self.keyword_paths
             )
             self.logger.info(f"Porcupine initialisé avec {len(self.keyword_paths)} wake words")
-            
+
+            # Initialiser PvRecorder
+            self.logger.info(f"Initialisation PvRecorder avec device {self.device_id}")
+            self.recorder = PvRecorder(
+                device_index=self.device_id,
+                frame_length=self.porcupine.frame_length
+            )
+            self.logger.info("PvRecorder initialisé")
+
             # Initialiser Vosk
             self.vosk_model = Model(self.stt_model_path)
             self.recognizer = KaldiRecognizer(self.vosk_model, self.sample_rate)
             self.logger.info("Vosk STT initialisé")
-            
+
             # Initialiser la queue audio
             self.audio_queue = queue.Queue()
-            
+
             self.logger.info("Module Wake Word initialisé avec succès")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Erreur initialisation Wake Word: {e}")
+            import traceback
+            self.logger.error(f"Traceback complet: {traceback.format_exc()}")
             return False
     
-    def _audio_callback(self, indata, frames, time, status):
-        """Callback pour le stream audio"""
-        if status:
-            self.logger.warning(f"Audio callback status: {status}")
-
-        # Vérifier que la queue existe
-        if self.audio_queue is not None:
-            self.audio_queue.put(indata.copy())
+    # Plus besoin de callback avec PvRecorder
     
     async def start_listening(self) -> None:
         """Démarre l'écoute du wake word"""
@@ -99,28 +121,22 @@ class WakeWordInput(InputModule):
             self.logger.warning("Wake Word déjà en écoute")
             return
 
+        # Vérifier que Porcupine est initialisé
+        if not self.porcupine:
+            self.logger.error("Impossible de démarrer - Porcupine n'est pas initialisé")
+            return
+
         try:
             self.logger.info("Démarrage de l'écoute wake word...")
-
-            # Debug: lister les périphériques audio disponibles
-            self._log_audio_devices()
-
             self.listening_for_wake_word = True
 
-            # Démarrer le stream audio
-            self.logger.info(f"Tentative d'ouverture du périphérique audio {self.device_id}")
-            self.stream = sd.InputStream(
-                channels=1,
-                samplerate=self.sample_rate,
-                callback=self._audio_callback,
-                blocksize=512,
-                device=self.device_id
-            )
-            self.stream.start()
-            self.logger.info("Stream audio démarré avec succès")
+            # Démarrer PvRecorder
+            self.logger.info(f"Démarrage PvRecorder avec device {self.device_id}")
+            self.recorder.start()
+            self.logger.info("PvRecorder démarré avec succès")
 
             # Démarrer la tâche de traitement audio
-            self.audio_task = asyncio.create_task(self._process_audio())
+            self.audio_task = asyncio.create_task(self._process_audio_pvrecorder())
 
             await self.emit_event(GLaDOSEvent('wake_word_listening_started', source=self.name))
             self.logger.info("Wake Word en écoute")
@@ -128,16 +144,6 @@ class WakeWordInput(InputModule):
         except Exception as e:
             self.logger.error(f"Erreur démarrage wake word: {e}")
             self.listening_for_wake_word = False
-
-            # Essayer avec le périphérique par défaut
-            if self.device_id is not None:
-                self.logger.info("Tentative avec le périphérique audio par défaut")
-                try:
-                    self.device_id = None  # Utiliser le périphérique par défaut
-                    await self.start_listening()  # Récursion avec device_id=None
-                    return
-                except Exception as fallback_error:
-                    self.logger.error(f"Erreur avec périphérique par défaut: {fallback_error}")
     
     async def stop_listening(self) -> None:
         """Arrête l'écoute du wake word"""
@@ -155,15 +161,32 @@ class WakeWordInput(InputModule):
             except asyncio.CancelledError:
                 pass
         
-        if self.stream:
-            self.stream.stop()
-            self.stream.close()
-            self.stream = None
+        if self.recorder:
+            self.recorder.stop()
         
         await self.emit_event(GLaDOSEvent('wake_word_listening_stopped', source=self.name))
         self.logger.info("Wake Word arrêté")
     
-    async def _process_audio(self) -> None:
+    async def _process_audio_pvrecorder(self) -> None:
+        """Traite l'audio en continu avec PvRecorder pour détecter wake words et STT"""
+        try:
+            while self.listening_for_wake_word:
+                # Lire les données audio depuis PvRecorder
+                pcm = await asyncio.get_event_loop().run_in_executor(None, self.recorder.read)
+
+                if not self.recording_speech:
+                    # Mode détection wake word
+                    await self._process_wake_word_detection(pcm)
+                else:
+                    # Mode enregistrement vocal
+                    await self._process_speech_recording(pcm)
+
+        except asyncio.CancelledError:
+            self.logger.info("Tâche de traitement audio annulée")
+        except Exception as e:
+            self.logger.error(f"Erreur traitement audio: {e}")
+
+    async def _process_audio_old(self) -> None:
         """Traite l'audio en continu pour détecter wake words et STT"""
         try:
             while self.listening_for_wake_word:
@@ -191,26 +214,22 @@ class WakeWordInput(InputModule):
         except Exception as e:
             self.logger.error(f"Erreur traitement audio: {e}")
     
-    async def _process_wake_word_detection(self, pcm: np.ndarray) -> None:
+    async def _process_wake_word_detection(self, pcm) -> None:
         """Traite l'audio pour détecter le wake word"""
         try:
-            # Découper en frames pour Porcupine
-            for i in range(0, len(pcm), self.porcupine.frame_length):
-                frame = pcm[i:i + self.porcupine.frame_length]
-                if len(frame) == self.porcupine.frame_length:
-                    keyword_index = self.porcupine.process(frame)
-                    if keyword_index >= 0:
-                        self.logger.info(f"Wake word détecté (index: {keyword_index})")
-                        await self.emit_event(GLaDOSEvent(
-                            'wake_word_detected', 
-                            data={'keyword_index': keyword_index},
-                            source=self.name
-                        ))
-                        
-                        # Passer en mode enregistrement
-                        await self._start_speech_recording()
-                        break
-                        
+            # PvRecorder retourne déjà les frames à la bonne taille
+            keyword_index = self.porcupine.process(pcm)
+            if keyword_index >= 0:
+                self.logger.info(f"Wake word détecté (index: {keyword_index})")
+                await self.emit_event(GLaDOSEvent(
+                    'wake_word_detected',
+                    data={'keyword_index': keyword_index},
+                    source=self.name
+                ))
+
+                # Passer en mode enregistrement
+                await self._start_speech_recording()
+
         except Exception as e:
             self.logger.error(f"Erreur détection wake word: {e}")
     
@@ -227,24 +246,28 @@ class WakeWordInput(InputModule):
         
         await self.emit_event(GLaDOSEvent('speech_recording_started', source=self.name))
     
-    async def _process_speech_recording(self, pcm: np.ndarray) -> None:
+    async def _process_speech_recording(self, pcm) -> None:
         """Traite l'audio en mode enregistrement vocal"""
         try:
+            # Convertir en numpy array pour traitement
+            pcm_array = np.array(pcm, dtype=np.int16)
+
             # Ajouter les frames à l'enregistrement
-            self.speech_frames.append(pcm)
-            
-            # Traiter avec Vosk
-            if self.recognizer.AcceptWaveform(pcm.tobytes()):
+            self.speech_frames.append(pcm_array)
+
+            # Traiter avec Vosk - convertir en bytes
+            pcm_bytes = pcm_array.tobytes()
+            if self.recognizer.AcceptWaveform(pcm_bytes):
                 result = json.loads(self.recognizer.Result())
                 text = result.get("text", "").strip()
-                
+
                 if text:
                     await self._handle_speech_result(text, final=True)
                     return
-            
+
             # Vérifier conditions d'arrêt
-            await self._check_recording_stop_conditions(pcm)
-            
+            await self._check_recording_stop_conditions(pcm_array)
+
         except Exception as e:
             self.logger.error(f"Erreur enregistrement vocal: {e}")
             await self._stop_speech_recording()
@@ -339,6 +362,10 @@ class WakeWordInput(InputModule):
         """Nettoie les ressources"""
         await self.stop_listening()
         
+        if self.recorder:
+            self.recorder.delete()
+            self.recorder = None
+
         if self.porcupine:
             self.porcupine.delete()
             self.porcupine = None

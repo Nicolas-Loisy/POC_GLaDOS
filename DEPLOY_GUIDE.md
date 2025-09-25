@@ -299,6 +299,53 @@ pactl list sources short    # Microphones
 pactl list sinks short      # Sorties audio
 ```
 
+**Vérifier le Wake Word :**
+
+Exécutez le script suivant dans le container pour identifier le numéro du périphérique microphone :
+
+```bash
+touch testd.py
+```
+
+```bash
+cat > testd.py << 'EOF'
+# test_devices.py
+from pvrecorder import PvRecorder
+import numpy as np
+
+def test_all_devices():
+    devices = PvRecorder.get_available_devices()
+    print(f"Périphériques PvRecorder disponibles: {len(devices)}")
+
+    for i, device in enumerate(devices):
+        print(f"\n🎤 Test device {i}: {device}")
+        try:
+            recorder = PvRecorder(device_index=i, frame_length=512)
+            recorder.start()
+
+            # Test 2 secondes
+            max_level = 0
+            for _ in range(32):  # ~2 secondes à 16kHz
+                pcm = recorder.read()
+                level = np.abs(pcm).max()
+                max_level = max(max_level, level)
+
+            recorder.stop()
+            recorder.delete()
+
+            print(f"   ✅ Fonctionne - Niveau max: {max_level}")
+            if max_level > 100:  # Seuil arbitraire
+                print(f"   🔊 Device {i} semble actif!")
+
+        except Exception as e:
+            print(f"   ❌ Erreur: {e}")
+
+if __name__ == "__main__":
+    test_all_devices()
+
+EOF
+```
+
 ### 4.3 Test GLaDOS
 
 1. Dire "GLaDOS" près du microphone
