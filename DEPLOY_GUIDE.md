@@ -1,5 +1,12 @@
 # Documentation : Déploiement GLaDOS sur Raspberry Pi avec Docker et Portainer
 
+## Création de l'image
+
+```bash
+# Start Docker Desktop
+docker buildx build --platform linux/amd64,linux/arm64 --tag virnes/glados-assistant:1.0.0 --tag virnes/glados-assistant:latest --push .
+```
+
 ## Étape 0 : Préparation du Raspberry Pi
 
 ```bash
