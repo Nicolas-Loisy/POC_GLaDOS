@@ -7,7 +7,7 @@ import asyncio
 import os
 import platform
 import time
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Literal
 import logging
 from pydantic import BaseModel, Field, model_validator
 from enum import Enum
@@ -271,7 +271,7 @@ class OsramRGBWRemote:
     Adaptée du script original pour intégration dans GLaDOS
     """
 
-    def __init__(self, ir_pin: int = 18):
+    def __init__(self, ir_pin: int = 19):
         self.ir_pin = ir_pin
         self.h = None
         self.OSRAM_ADDRESS = 0x00
@@ -448,6 +448,43 @@ class OsramRGBWRemote:
             lgpio.gpiochip_close(self.h)
 
 
+# Modèle Pydantic strict pour OSRAM
+class OsramGeneralParameters(BaseModel):
+    """Modèle général pour le contrôle OSRAM IR"""
+    action: Literal["power", "brightness", "color", "effect"] = Field(description="Type d'action à effectuer")
+    command: Literal[
+        # Power
+        "on", "off", "toggle",
+        # Brightness
+        "bright_up", "bright_down", "bright_max", "bright_min",
+        # Color
+        "red", "green", "blue", "white", "yellow", "orange", "purple", "pink", "cyan", "magenta",
+        "warm_white", "cool_white", "lime", "navy", "teal", "maroon",
+        # Effects
+        "flash", "strobe", "fade", "smooth"
+    ] = Field(description="Commande spécifique selon l'action")
+
+    # Paramètre optionnel
+    repeat_count: int = Field(default=0, ge=0, le=10, description="Répétitions (0-10)")
+
+    @model_validator(mode='after')
+    def validate_action_command_compatibility(self):
+        """Valide que la commande est compatible avec l'action"""
+        valid_combinations = {
+            "power": ["on", "off", "toggle"],
+            "brightness": ["bright_up", "bright_down", "bright_max", "bright_min"],
+            "color": ["red", "green", "blue", "white", "yellow", "orange", "purple", "pink",
+                     "cyan", "magenta", "warm_white", "cool_white", "lime", "navy", "teal", "maroon"],
+            "effect": ["flash", "strobe", "fade", "smooth"]
+        }
+
+        if self.command not in valid_combinations[self.action]:
+            valid_commands = valid_combinations[self.action]
+            raise ValueError(f"Commande '{self.command}' invalide pour action '{self.action}'. Commandes valides: {valid_commands}")
+
+        return self
+
+
 class IROsramAdapter(ToolAdapter):
     """Adaptateur pour le contrôle IR des ampoules OSRAM RGBW"""
 
@@ -456,7 +493,7 @@ class IROsramAdapter(ToolAdapter):
         self.logger = logging.getLogger(__name__)
 
         # Configuration
-        self.ir_pin = config.get('ir_pin', 18)
+        self.ir_pin = config.get('ir_pin', 19)
         self.tool_name = config.get('tool_name', 'control_osram_ir')
         self.tool_description = config.get('tool_description', 'Contrôle OSRAM RGBW par infrarouge')
         self.remote = None
@@ -465,25 +502,16 @@ class IROsramAdapter(ToolAdapter):
         self.name = self.tool_name
         self.description = self.tool_description
 
-        # Validation de la plateforme
-        if not IS_RASPBERRY_PI:
-            self.logger.error(f"Contrôle IR OSRAM non disponible sur {platform.machine()}")
-        elif not LGPIO_AVAILABLE:
-            self.logger.error("Module lgpio requis non disponible")
-
-    async def initialize(self) -> bool:
-        """Initialise l'adaptateur IR OSRAM"""
-        if not IS_RASPBERRY_PI or not LGPIO_AVAILABLE:
-            self.logger.warning("IR OSRAM désactivé (non Raspberry Pi ou lgpio manquant)")
-            return False
-
-        try:
-            self.remote = OsramRGBWRemote(self.ir_pin)
-            self.logger.info(f"Adaptateur IR OSRAM initialisé (pin {self.ir_pin})")
-            return True
-        except Exception as e:
-            self.logger.error(f"Erreur initialisation IR OSRAM: {e}")
-            return False
+        if IS_RASPBERRY_PI and LGPIO_AVAILABLE:
+            try:
+                self.remote = OsramRGBWRemote(self.ir_pin)
+                self.logger.info(f"Adaptateur IR OSRAM initialisé (pin {self.ir_pin})")
+            except Exception as e:
+                self.logger.error(f"Erreur initialisation IR OSRAM: {e}")
+                self.remote = None
+        else:
+            self.logger.warning(f"IR OSRAM désactivé (plateforme: {platform.machine()}, lgpio: {LGPIO_AVAILABLE})")
+            self.remote = None
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Retourne le schéma des paramètres pour l'IR OSRAM"""
@@ -510,6 +538,10 @@ class IROsramAdapter(ToolAdapter):
             "required": ["action", "command"]
         }
 
+    def get_pydantic_schema(self):
+        """Retourne le modèle Pydantic pour LlamaIndex"""
+        return OsramGeneralParameters
+
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Exécute une commande IR OSRAM avec validation stricte"""
         if not self.remote:
@@ -519,74 +551,11 @@ class IROsramAdapter(ToolAdapter):
             }
 
         try:
-            # Récupérer les paramètres
-            action = kwargs.get('action')
-            command = kwargs.get('command')
-            repeat_count = kwargs.get('repeat_count', 0)
-
-            return await self._control_osram_ir(action, command, repeat_count)
-
-        except Exception as e:
-            self.logger.error(f"Erreur contrôle IR OSRAM: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-    async def _control_osram_ir(self, action: str, command: str, repeat_count: int = 0) -> Dict[str, Any]:
-        """Exécute une commande IR OSRAM avec validation stricte"""
-        try:
             # Validation stricte avec Pydantic
-            params_dict = {
-                'action': action,
-                'command': command,
-                'repeat_count': repeat_count
-            }
+            params = OsramGeneralParameters(**kwargs)
 
-            # Validation avec la fonction helper
-            validated_params = validate_osram_parameters(params_dict)
-
-            # Conversion de la commande en format attendu
-            command_upper = validated_params.command.value.upper()
-
-            # Gestion des aliases
-            if command_upper == 'ORANGE':
-                command_upper = 'RED1'
-            elif command_upper == 'CYAN':
-                command_upper = 'BLUE1'
-            elif command_upper == 'PURPLE':
-                command_upper = 'RED2'
-            elif command_upper == 'YELLOW':
-                command_upper = 'GREEN2'
-            elif command_upper == 'PINK':
-                command_upper = 'RED3'
-            elif command_upper == 'LIME':
-                command_upper = 'GREEN3'
-            elif command_upper == 'VIOLET':
-                command_upper = 'BLUE3'
-            elif command_upper == 'MAGENTA':
-                command_upper = 'RED4'
-
-            self.logger.info(f"Envoi commande IR OSRAM: {command_upper} (répétitions: {validated_params.repeat_count})")
-
-            # Envoi de la commande
-            success = self.remote.send_command(command_upper, validated_params.repeat_count)
-
-            if success:
-                message = f"Commande IR OSRAM '{validated_params.command.value}' envoyée"
-                if validated_params.repeat_count > 0:
-                    message += f" ({validated_params.repeat_count} répétitions)"
-                return {
-                    "success": True,
-                    "message": message,
-                    "action": validated_params.command.value,
-                    "repeat_count": validated_params.repeat_count
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": f"Échec envoi commande IR OSRAM '{validated_params.command.value}'"
-                }
+            # Exécuter selon l'action validée
+            return await self._execute_validated_command(params)
 
         except Exception as e:
             self.logger.error(f"Erreur contrôle IR OSRAM: {e}")
@@ -594,6 +563,68 @@ class IROsramAdapter(ToolAdapter):
                 "success": False,
                 "error": str(e)
             }
+
+    async def _execute_validated_command(self, params: OsramGeneralParameters) -> Dict[str, Any]:
+        """Exécute une commande OSRAM après validation"""
+        # Mapping des commandes vers format attendu par le remote
+        command_mapping = {
+            # Power
+            'on': 'ON',
+            'off': 'OFF',
+            'toggle': 'TOGGLE',
+            # Brightness
+            'bright_up': 'BRIGHT_UP',
+            'bright_down': 'BRIGHT_DOWN',
+            'bright_max': 'BRIGHT_MAX',
+            'bright_min': 'BRIGHT_MIN',
+            # Basic colors
+            'red': 'RED',
+            'green': 'GREEN',
+            'blue': 'BLUE',
+            'white': 'WHITE',
+            # Extended colors (aliasés vers les codes NEC)
+            'yellow': 'GREEN2',
+            'orange': 'RED1',
+            'purple': 'RED2',
+            'pink': 'RED3',
+            'cyan': 'BLUE1',
+            'magenta': 'RED4',
+            'warm_white': 'WHITE',
+            'cool_white': 'WHITE',
+            'lime': 'GREEN3',
+            'navy': 'BLUE',
+            'teal': 'BLUE1',
+            'maroon': 'RED',
+            # Effects
+            'flash': 'FLASH',
+            'strobe': 'STROBE',
+            'fade': 'FADE',
+            'smooth': 'SMOOTH'
+        }
+
+        remote_command = command_mapping.get(params.command)
+        if not remote_command:
+            return {"success": False, "error": f"Commande '{params.command}' non mappée"}
+
+        self.logger.info(f"Envoi commande IR OSRAM: {params.action}/{params.command} -> {remote_command}")
+
+        # Envoi de la commande avec répétitions
+        success = self.remote.send_command(remote_command, params.repeat_count)
+        if not success:
+            return {"success": False, "error": f"Échec envoi commande '{params.command}'"}
+
+        # Construire le message de résultat
+        message = f"Commande {params.action}/{params.command} envoyée"
+        if params.repeat_count > 0:
+            message += f" (x{params.repeat_count + 1})"
+
+        return {
+            "success": True,
+            "message": message,
+            "action": params.action,
+            "command": params.command,
+            "repeat_count": params.repeat_count
+        }
 
     async def cleanup(self) -> None:
         """Nettoie les ressources"""

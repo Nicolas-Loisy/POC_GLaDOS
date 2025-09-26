@@ -7,9 +7,9 @@ import asyncio
 import os
 import platform
 import time
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional, Annotated, Literal
 import logging
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, Discriminator
 from enum import Enum
 
 from ...core.interfaces import ToolAdapter
@@ -138,152 +138,92 @@ YAMAHA_ALIASES = {
 }
 
 
-# Modèles Pydantic stricts pour chaque type d'action
+# Modèles Pydantic stricts par action avec validation
 class YamahaBaseParameters(BaseModel):
     """Paramètres de base pour toutes les actions Yamaha IR"""
-
-    @model_validator(mode='after')
-    def validate_raspberry_pi(self):
-        """Valide que le système est un Raspberry Pi avec lgpio disponible"""
-        if not IS_RASPBERRY_PI:
-            raise ValueError(
-                "Contrôle IR Yamaha disponible uniquement sur Raspberry Pi. "
-                f"Plateforme détectée: {platform.machine()}"
-            )
-
-        if not LGPIO_AVAILABLE:
-            raise ValueError(
-                "Module lgpio requis non disponible. Installez avec: sudo apt install python3-lgpio"
-            )
-
-        return self
-
+    pass
 
 class YamahaPowerParameters(YamahaBaseParameters):
     """Paramètres pour le contrôle d'alimentation Yamaha"""
-    action: YamahaAction = Field(default=YamahaAction.POWER, description="Contrôle de l'alimentation")
-    command: YamahaCommand = Field(description="Commande d'alimentation: power")
-    double_send: bool = Field(
-        default=True,
-        description="Envoi double du signal pour fiabilité (recommandé pour POWER)"
-    )
+    action: YamahaAction = Field(default=YamahaAction.POWER, description="Action d'alimentation")
+    command: YamahaCommand = Field(description="Commande: power")
+    double_send: bool = Field(default=True, description="Envoi double pour fiabilité")
 
     @model_validator(mode='after')
     def validate_power_command(self):
-        """Valide que la commande est bien une commande d'alimentation"""
-        super().validate_raspberry_pi()
-
+        """Valide que la commande correspond à l'action power"""
         if self.command not in COMMAND_ACTIONS[YamahaAction.POWER]:
             valid_commands = [cmd.value for cmd in COMMAND_ACTIONS[YamahaAction.POWER]]
-            raise ValueError(
-                f"Commande '{self.command}' invalide pour l'action 'power'. "
-                f"Commandes valides: {valid_commands}"
-            )
+            raise ValueError(f"Commande '{self.command}' invalide pour action 'power'. Commandes valides: {valid_commands}")
         return self
-
 
 class YamahaVolumeParameters(YamahaBaseParameters):
     """Paramètres pour le contrôle de volume Yamaha"""
-    action: YamahaAction = Field(default=YamahaAction.VOLUME, description="Contrôle du volume")
-    command: YamahaCommand = Field(description="Commande de volume: vol_up ou vol_down")
-    repeat_count: int = Field(
-        default=1,
-        ge=1,
-        le=10,
-        description="Nombre de répétitions pour ajuster le volume (1-10)"
-    )
+    action: YamahaAction = Field(default=YamahaAction.VOLUME, description="Action de volume")
+    command: YamahaCommand = Field(description="Commande: vol_up ou vol_down")
+    repeat_count: int = Field(default=1, ge=1, le=10, description="Répétitions (1-10)")
 
     @model_validator(mode='after')
     def validate_volume_command(self):
-        """Valide que la commande est bien une commande de volume"""
-        super().validate_raspberry_pi()
-
+        """Valide que la commande correspond à l'action volume"""
         if self.command not in COMMAND_ACTIONS[YamahaAction.VOLUME]:
             valid_commands = [cmd.value for cmd in COMMAND_ACTIONS[YamahaAction.VOLUME]]
-            raise ValueError(
-                f"Commande '{self.command}' invalide pour l'action 'volume'. "
-                f"Commandes valides: {valid_commands}"
-            )
+            raise ValueError(f"Commande '{self.command}' invalide pour action 'volume'. Commandes valides: {valid_commands}")
         return self
-
 
 class YamahaPlaybackParameters(YamahaBaseParameters):
     """Paramètres pour le contrôle de lecture Yamaha"""
-    action: YamahaAction = Field(default=YamahaAction.PLAYBACK, description="Contrôle de la lecture")
-    command: YamahaCommand = Field(description="Commande de lecture: play, pause, stop, ff, rew")
+    action: YamahaAction = Field(default=YamahaAction.PLAYBACK, description="Action de lecture")
+    command: YamahaCommand = Field(description="Commande: play, pause, stop, ff, rew")
 
     @model_validator(mode='after')
     def validate_playback_command(self):
-        """Valide que la commande est bien une commande de lecture"""
-        super().validate_raspberry_pi()
-
+        """Valide que la commande correspond à l'action playback"""
         if self.command not in COMMAND_ACTIONS[YamahaAction.PLAYBACK]:
             valid_commands = [cmd.value for cmd in COMMAND_ACTIONS[YamahaAction.PLAYBACK]]
-            raise ValueError(
-                f"Commande '{self.command}' invalide pour l'action 'playback'. "
-                f"Commandes valides: {valid_commands}"
-            )
+            raise ValueError(f"Commande '{self.command}' invalide pour action 'playback'. Commandes valides: {valid_commands}")
         return self
-
 
 class YamahaSourceParameters(YamahaBaseParameters):
     """Paramètres pour la sélection de source Yamaha"""
-    action: YamahaAction = Field(default=YamahaAction.SOURCE, description="Sélection de source audio")
-    command: YamahaCommand = Field(description="Source: tuner, tape, aux, md, dvd, mode (CD)")
+    action: YamahaAction = Field(default=YamahaAction.SOURCE, description="Action de source")
+    command: YamahaCommand = Field(description="Commande: tuner, tape, aux, md, dvd, mode")
 
     @model_validator(mode='after')
     def validate_source_command(self):
-        """Valide que la commande est bien une commande de source"""
-        super().validate_raspberry_pi()
-
+        """Valide que la commande correspond à l'action source"""
         if self.command not in COMMAND_ACTIONS[YamahaAction.SOURCE]:
             valid_commands = [cmd.value for cmd in COMMAND_ACTIONS[YamahaAction.SOURCE]]
-            raise ValueError(
-                f"Commande '{self.command}' invalide pour l'action 'source'. "
-                f"Commandes valides: {valid_commands}"
-            )
+            raise ValueError(f"Commande '{self.command}' invalide pour action 'source'. Commandes valides: {valid_commands}")
         return self
-
 
 class YamahaDigitParameters(YamahaBaseParameters):
     """Paramètres pour la saisie de chiffres Yamaha"""
-    action: YamahaAction = Field(default=YamahaAction.DIGIT, description="Saisie de chiffres")
-    command: YamahaCommand = Field(description="Chiffre: digit_0 à digit_9")
+    action: YamahaAction = Field(default=YamahaAction.DIGIT, description="Action de chiffre")
+    command: YamahaCommand = Field(description="Commande: digit_0 à digit_9")
 
     @model_validator(mode='after')
     def validate_digit_command(self):
-        """Valide que la commande est bien une commande de chiffre"""
-        super().validate_raspberry_pi()
-
+        """Valide que la commande correspond à l'action digit"""
         if self.command not in COMMAND_ACTIONS[YamahaAction.DIGIT]:
             valid_commands = [cmd.value for cmd in COMMAND_ACTIONS[YamahaAction.DIGIT]]
-            raise ValueError(
-                f"Commande '{self.command}' invalide pour l'action 'digit'. "
-                f"Commandes valides: {valid_commands}"
-            )
+            raise ValueError(f"Commande '{self.command}' invalide pour action 'digit'. Commandes valides: {valid_commands}")
         return self
-
 
 class YamahaFunctionParameters(YamahaBaseParameters):
     """Paramètres pour les fonctions Yamaha"""
-    action: YamahaAction = Field(default=YamahaAction.FUNCTION, description="Fonctions diverses")
-    command: YamahaCommand = Field(description="Fonction: random, repeat, display, sleep, etc.")
+    action: YamahaAction = Field(default=YamahaAction.FUNCTION, description="Action de fonction")
+    command: YamahaCommand = Field(description="Commande: random, repeat, display, sleep, etc.")
 
     @model_validator(mode='after')
     def validate_function_command(self):
-        """Valide que la commande est bien une commande de fonction"""
-        super().validate_raspberry_pi()
-
+        """Valide que la commande correspond à l'action function"""
         if self.command not in COMMAND_ACTIONS[YamahaAction.FUNCTION]:
             valid_commands = [cmd.value for cmd in COMMAND_ACTIONS[YamahaAction.FUNCTION]]
-            raise ValueError(
-                f"Commande '{self.command}' invalide pour l'action 'function'. "
-                f"Commandes valides: {valid_commands}"
-            )
+            raise ValueError(f"Commande '{self.command}' invalide pour action 'function'. Commandes valides: {valid_commands}")
         return self
 
-
-# Union des paramètres Yamaha pour la validation
+# Union des paramètres Yamaha (sans discriminator pour simplifier)
 YamahaParameters = Union[
     YamahaPowerParameters,
     YamahaVolumeParameters,
@@ -294,24 +234,50 @@ YamahaParameters = Union[
 ]
 
 
-def validate_yamaha_parameters(params_dict: Dict[str, Any]) -> Union[YamahaPowerParameters, YamahaVolumeParameters, YamahaPlaybackParameters, YamahaSourceParameters, YamahaDigitParameters, YamahaFunctionParameters]:
-    """Valide et retourne les paramètres selon l'action"""
-    action = params_dict.get('action')
+# Modèle général pour LlamaIndex avec littéraux stricts
+class YamahaGeneralParameters(BaseModel):
+    """Modèle général pour le contrôle Yamaha IR"""
+    action: Literal["power", "volume", "playback", "source", "digit", "function"] = Field(description="Type d'action à effectuer")
+    command: Literal[
+        # Power
+        "power",
+        # Volume
+        "vol_up", "vol_down",
+        # Playback
+        "play", "pause", "stop", "ff", "rew",
+        # Source
+        "tuner", "tape", "aux", "md", "dvd", "mode",
+        # Digits
+        "digit_0", "digit_1", "digit_2", "digit_3", "digit_4",
+        "digit_5", "digit_6", "digit_7", "digit_8", "digit_9",
+        # Functions
+        "random", "repeat", "display", "sleep", "mode_10", "start_100", "preset_up", "preset_down", "time"
+    ] = Field(description="Commande spécifique selon l'action")
 
-    if action == 'power':
-        return YamahaPowerParameters(**params_dict)
-    elif action == 'volume':
-        return YamahaVolumeParameters(**params_dict)
-    elif action == 'playback':
-        return YamahaPlaybackParameters(**params_dict)
-    elif action == 'source':
-        return YamahaSourceParameters(**params_dict)
-    elif action == 'digit':
-        return YamahaDigitParameters(**params_dict)
-    elif action == 'function':
-        return YamahaFunctionParameters(**params_dict)
-    else:
-        raise ValueError(f"Action '{action}' non supportée. Actions valides: power, volume, playback, source, digit, function")
+    # Paramètres optionnels
+    double_send: bool = Field(default=True, description="Envoi double du signal (pour power)")
+    repeat_count: int = Field(default=1, ge=1, le=10, description="Répétitions (pour volume)")
+
+    @model_validator(mode='after')
+    def validate_action_command_compatibility(self):
+        """Valide que la commande est compatible avec l'action"""
+        # Mapping action -> commandes valides
+        valid_combinations = {
+            "power": ["power"],
+            "volume": ["vol_up", "vol_down"],
+            "playback": ["play", "pause", "stop", "ff", "rew"],
+            "source": ["tuner", "tape", "aux", "md", "dvd", "mode"],
+            "digit": ["digit_0", "digit_1", "digit_2", "digit_3", "digit_4",
+                     "digit_5", "digit_6", "digit_7", "digit_8", "digit_9"],
+            "function": ["random", "repeat", "display", "sleep", "mode_10",
+                        "start_100", "preset_up", "preset_down", "time"]
+        }
+
+        if self.command not in valid_combinations[self.action]:
+            valid_commands = valid_combinations[self.action]
+            raise ValueError(f"Commande '{self.command}' invalide pour action '{self.action}'. Commandes valides: {valid_commands}")
+
+        return self
 
 
 class YamahaRemote:
@@ -525,28 +491,19 @@ class IRYamahaAdapter(ToolAdapter):
         self.name = self.tool_name
         self.description = self.tool_description
 
-        # Validation de la plateforme
-        if not IS_RASPBERRY_PI:
-            self.logger.error(f"Contrôle IR Yamaha non disponible sur {platform.machine()}")
-        elif not LGPIO_AVAILABLE:
-            self.logger.error("Module lgpio requis non disponible")
-
-    async def initialize(self) -> bool:
-        """Initialise l'adaptateur IR Yamaha"""
-        if not IS_RASPBERRY_PI or not LGPIO_AVAILABLE:
-            self.logger.warning("IR Yamaha désactivé (non Raspberry Pi ou lgpio manquant)")
-            return False
-
-        try:
-            self.remote = YamahaRemote(self.ir_pin)
-            self.logger.info(f"Adaptateur IR Yamaha initialisé (pin {self.ir_pin})")
-            return True
-        except Exception as e:
-            self.logger.error(f"Erreur initialisation IR Yamaha: {e}")
-            return False
+        if IS_RASPBERRY_PI and LGPIO_AVAILABLE:
+            try:
+                self.remote = YamahaRemote(self.ir_pin)
+                self.logger.info(f"Adaptateur IR Yamaha initialisé (pin {self.ir_pin})")
+            except Exception as e:
+                self.logger.error(f"Erreur initialisation IR Yamaha: {e}")
+                self.remote = None
+        else:
+            self.logger.warning(f"IR Yamaha désactivé (plateforme: {platform.machine()}, lgpio: {LGPIO_AVAILABLE})")
+            self.remote = None
 
     def get_parameters_schema(self) -> Dict[str, Any]:
-        """Retourne le schéma des paramètres pour l'IR Yamaha"""
+        """Retourne le schéma des paramètres pour l'IR Yamaha (format OpenAI)"""
         return {
             "type": "object",
             "properties": {
@@ -561,19 +518,23 @@ class IRYamahaAdapter(ToolAdapter):
                 },
                 "double_send": {
                     "type": "boolean",
-                    "default": False,
-                    "description": "Envoi double du signal (recommandé pour POWER)"
+                    "default": True,
+                    "description": "Envoi double du signal (pour power)"
                 },
                 "repeat_count": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 10,
                     "default": 1,
-                    "description": "Nombre de répétitions (pour volume uniquement)"
+                    "description": "Répétitions (pour volume)"
                 }
             },
             "required": ["action", "command"]
         }
+
+    def get_pydantic_schema(self):
+        """Retourne le modèle Pydantic pour LlamaIndex"""
+        return YamahaGeneralParameters
 
     async def execute(self, **kwargs) -> Dict[str, Any]:
         """Exécute une commande IR Yamaha avec validation stricte"""
@@ -584,99 +545,11 @@ class IRYamahaAdapter(ToolAdapter):
             }
 
         try:
-            # Récupérer les paramètres
-            action = kwargs.get('action')
-            command = kwargs.get('command')
-            double_send = kwargs.get('double_send', False)
-            repeat_count = kwargs.get('repeat_count', 1)
-
-            return await self._control_yamaha_ir(action, command, double_send, repeat_count)
-
-        except Exception as e:
-            self.logger.error(f"Erreur contrôle IR Yamaha: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-    async def _control_yamaha_ir(self, action: str, command: str, double_send: bool = False, repeat_count: int = 1) -> Dict[str, Any]:
-        """Exécute une commande IR Yamaha avec validation stricte"""
-        try:
             # Validation stricte avec Pydantic
-            params_dict = {
-                'action': action,
-                'command': command
-            }
+            params = YamahaGeneralParameters(**kwargs)
 
-            # Ajouter les paramètres optionnels selon l'action
-            if action == 'power':
-                params_dict['double_send'] = double_send
-            elif action == 'volume':
-                params_dict['repeat_count'] = repeat_count
-
-            # Validation avec la fonction helper
-            validated_params = validate_yamaha_parameters(params_dict)
-
-            # Conversion de la commande en format attendu
-            command_upper = validated_params.command.value.upper()
-
-            # Gestion des aliases et mapping
-            command_mapping = {
-                'VOL_UP': 'VOL_UP',
-                'VOL_DOWN': 'VOL_DOWN',
-                'FF': 'FF',
-                'REW': 'REW',
-                'MODE': 'MODE',
-                'DIGIT_0': 'DIGIT_0',
-                'DIGIT_1': 'DIGIT_1',
-                'DIGIT_2': 'DIGIT_2',
-                'DIGIT_3': 'DIGIT_3',
-                'DIGIT_4': 'DIGIT_4',
-                'DIGIT_5': 'DIGIT_5',
-                'DIGIT_6': 'DIGIT_6',
-                'DIGIT_7': 'DIGIT_7',
-                'DIGIT_8': 'DIGIT_8',
-                'DIGIT_9': 'DIGIT_9',
-                'PRESET_UP': 'PRESET_UP',
-                'PRESET_DOWN': 'PRESET_DN',
-                'RANDOM': 'RANDOM_B',
-                'REPEAT': 'REP_A'
-            }
-
-            final_command = command_mapping.get(command_upper, command_upper)
-
-            # Gestion spéciale pour POWER
-            use_double_send = getattr(validated_params, 'double_send', False) if action == 'power' else False
-            use_repeat_count = getattr(validated_params, 'repeat_count', 1) if action == 'volume' else 1
-
-            self.logger.info(f"Envoi commande IR Yamaha: {final_command} (double_send: {use_double_send}, repeat: {use_repeat_count})")
-
-            # Envoi de la commande
-            for i in range(use_repeat_count):
-                success = self.remote.send_command(final_command, use_double_send)
-                if not success:
-                    return {
-                        "success": False,
-                        "error": f"Échec envoi commande IR Yamaha '{validated_params.command.value}'"
-                    }
-
-                # Délai entre répétitions
-                if i < use_repeat_count - 1:
-                    time.sleep(0.5)
-
-            message = f"Commande IR Yamaha '{validated_params.command.value}' envoyée"
-            if use_double_send:
-                message += " (double envoi)"
-            if use_repeat_count > 1:
-                message += f" ({use_repeat_count} répétitions)"
-
-            return {
-                "success": True,
-                "message": message,
-                "action": validated_params.command.value,
-                "double_send": use_double_send,
-                "repeat_count": use_repeat_count
-            }
+            # Exécuter selon l'action validée
+            return await self._execute_validated_command(params)
 
         except Exception as e:
             self.logger.error(f"Erreur contrôle IR Yamaha: {e}")
@@ -684,6 +557,78 @@ class IRYamahaAdapter(ToolAdapter):
                 "success": False,
                 "error": str(e)
             }
+
+    async def _execute_validated_command(self, params: YamahaGeneralParameters) -> Dict[str, Any]:
+        """Exécute une commande Yamaha après validation"""
+        # Mapping des commandes vers format attendu par le remote
+        command_mapping = {
+            'power': 'POWER',
+            'vol_up': 'VOL_UP',
+            'vol_down': 'VOL_DOWN',
+            'play': 'PLAY',
+            'pause': 'PAUSE',
+            'stop': 'STOP',
+            'ff': 'FF',
+            'rew': 'REW',
+            'tuner': 'TUNER',
+            'tape': 'TAPE',
+            'aux': 'AUX',
+            'md': 'MD',
+            'dvd': 'DVD',
+            'mode': 'MODE',
+            'digit_0': 'DIGIT_0',
+            'digit_1': 'DIGIT_1',
+            'digit_2': 'DIGIT_2',
+            'digit_3': 'DIGIT_3',
+            'digit_4': 'DIGIT_4',
+            'digit_5': 'DIGIT_5',
+            'digit_6': 'DIGIT_6',
+            'digit_7': 'DIGIT_7',
+            'digit_8': 'DIGIT_8',
+            'digit_9': 'DIGIT_9',
+            'random': 'RANDOM_B',
+            'repeat': 'REP_A',
+            'display': 'DISPLAY',
+            'sleep': 'SLEEP',
+            'preset_up': 'PRESET_UP',
+            'preset_down': 'PRESET_DN'
+        }
+
+        remote_command = command_mapping.get(params.command)
+        if not remote_command:
+            return {"success": False, "error": f"Commande '{params.command}' non mappée"}
+
+        # Paramètres d'envoi selon l'action
+        use_double_send = params.double_send if params.action == "power" else False
+        use_repeat_count = params.repeat_count if params.action == "volume" else 1
+
+        self.logger.info(f"Envoi commande IR Yamaha: {params.action}/{params.command} -> {remote_command}")
+
+        # Envoi avec répétitions si nécessaire
+        for i in range(use_repeat_count):
+            success = self.remote.send_command(remote_command, use_double_send)
+            if not success:
+                return {"success": False, "error": f"Échec envoi commande '{params.command}'"}
+
+            if i < use_repeat_count - 1:
+                time.sleep(0.5)
+
+        # Construire le message de résultat
+        message = f"Commande {params.action}/{params.command} envoyée"
+        if use_double_send:
+            message += " (double envoi)"
+        if use_repeat_count > 1:
+            message += f" (x{use_repeat_count})"
+
+        return {
+            "success": True,
+            "message": message,
+            "action": params.action,
+            "command": params.command,
+            "double_send": use_double_send,
+            "repeat_count": use_repeat_count
+        }
+
 
     async def cleanup(self) -> None:
         """Nettoie les ressources"""
