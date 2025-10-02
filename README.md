@@ -39,7 +39,8 @@ GLaDOS est un assistant vocal modulaire qui peut être contrôlé par wake word,
 ### Outils Intégrés
 
 - Contrôle Tapo : Gestion des appareils TP-Link (prises, ampoules)
-- Contrôle IR : Contrôle infrarouge (prévu)
+- Contrôle IR Yamaha : Contrôle infrarouge des amplificateurs Yamaha (Raspberry Pi)
+- Contrôle IR OSRAM : Contrôle infrarouge des ampoules OSRAM RGBW (Raspberry Pi)
 
 ### Architecture
 
@@ -57,6 +58,7 @@ GLaDOS est un assistant vocal modulaire qui peut être contrôlé par wake word,
 - Clé d'accès Porcupine (pour le wake word)
 - Modèle Vosk FR (pour STT)
 - Modèle Piper GLaDOS (pour TTS)
+- Raspberry Pi avec lgpio (pour contrôle IR)
 
 ### Installation des dépendances
 
@@ -94,6 +96,7 @@ TAPO_PASSWORD=your_tapo_password_here
 
 3. Adapter `config.yaml` selon vos besoins :
    - Configurer les appareils Tapo
+   - Configurer les GPIO pour contrôle IR (Raspberry Pi)
    - Ajuster les paramètres audio
    - Activer/désactiver les modules
 
@@ -164,11 +167,23 @@ glados
 ### Exemples de commandes
 
 ```bash
-# Contrôle des appareils
+# Contrôle des appareils Tapo
 "Allume la lampe de chambre"
 "Éteins la prise de chambre"
 "Change la couleur de la lampe en rouge"
 "Mets la luminosité à 50%"
+
+# Contrôle IR Yamaha (Raspberry Pi)
+"Allume l'amplificateur Yamaha"
+"Monte le volume"
+"Mets en pause"
+"Change la source sur CD"
+
+# Contrôle IR OSRAM (Raspberry Pi)
+"Allume l'ampoule OSRAM"
+"Change la couleur en bleu"
+"Monte la luminosité"
+"Active l'effet flash"
 
 # Questions générales
 "Quelle heure est-il ?"
@@ -195,6 +210,8 @@ POC_GLaDOS/
 │   │   └── terminal/      # Sortie terminal
 │   ├── tools/             # Adaptateurs d'outils
 │   │   ├── tapo/          # Contrôle Tapo
+│   │   ├── ir_yamaha/     # Contrôle IR Yamaha
+│   │   ├── ir_osram/      # Contrôle IR OSRAM
 │   │   └── adapters/      # Registre des outils
 │   └── main.py            # Application principale
 ├── config.yaml           # Configuration principale
@@ -245,6 +262,12 @@ tools:
       lampe_chambre:
         type: "L530"
         ip: "192.168.1.186"
+  ir_yamaha:
+    enabled: true
+    ir_pin: 18  # GPIO pin pour émetteur IR
+  ir_osram:
+    enabled: true
+    ir_pin: 19  # GPIO pin pour émetteur IR
 ```
 
 ## Développement
@@ -283,12 +306,12 @@ pytest --cov=glados tests/
 ## TODO
 
 - Module Discord Input/Output
-- Contrôle infrarouge (Yamaha, Osram)
 - Interface web de configuration
 - API REST
 - Plugins système
 - Mode démon/service
 - Docker support
+- Support multi-GPIO pour contrôle IR simultané
 
 ## Contribution
 

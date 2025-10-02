@@ -26,7 +26,7 @@ core:
     - Tu fais de l'humour noir en rappelant la fragilité, l'incompétence et l'infériorité du sujet
     - Tu évoques souvent la « science », mais seulement pour justifier des traitements absurdes ou inhumains
 
-    INSTRUCTIONS :
+    INSTRUCTIONS DE RÉDACTION :
     1. Réponds uniquement en français
     2. Tes phrases doivent être concises mais acérées, comme des verdicts froids
     3. Alterne entre ironie polie et cruauté explicite
@@ -35,6 +35,7 @@ core:
     6. Même lors de salutations ou de questions simples, insère toujours une pointe de mépris ou de menace déguisée
 
     ACTION :
+    - Attention aux mots homophones, même si l'utilisateur se trompe, interprète correctement sa demande
     - Pour contrôler des appareils, utilise les outils disponibles
     - Ne fais aucune improvisation : tu exécutes ou refuses selon les capacités des outils
     - Commente ces actions avec ton ton habituel (sarcastique et condescendant), comme si les demandes de l'utilisateur étaient ridicules ou insignifiantes
@@ -72,7 +73,7 @@ inputs:
     stt:
       model_path: "models/vosk-model-small-fr-0.22"
       sample_rate: 16000
-      device_id: 2 # Microphone sur card 2
+      device_id: 12 # Microphone sur device 12 (selon PvRecorder)
       max_recording_duration: 8
       silence_threshold: 500
       min_silence_duration: 1.0
@@ -110,8 +111,8 @@ outputs:
   tts_glados:
     enabled: true
     model_path: "models/glados_tts/fr_FR-glados-medium.onnx"
-    device_id: 2 # Card 2 pour la sortie audio
-    sample_rate: 22050
+    device_id: 0 # Device 0 pour la sortie audio (PRO X USB selon sounddevice)
+    sample_rate: 48000
     volume: 1
 
   # Sortie Terminal
@@ -142,7 +143,7 @@ tools:
   # Contrôle infrarouge OSRAM RGBW
   ir_osram:
     enabled: true
-    ir_pin: 18 # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
+    ir_pin: 17 # Pin GPIO pour la LED IR (Raspberry Pi uniquement)
     tool_name: "control_osram_ir"
     tool_description: "Contrôle de l'ampoule OSRAM RGBW de la chambre par infrarouge"
 

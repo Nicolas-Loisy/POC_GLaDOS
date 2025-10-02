@@ -32,8 +32,9 @@ docker run -d -p 8000:8000 -p 9443:9443 --name portainer --restart=always \
 ### Vérification des périphériques
 
 ```bash
-# Vérifier l'accès GPIO
+# Vérifier l'accès GPIO (requis pour contrôle IR)
 ls -l /dev/gpiomem*
+ls -l /dev/gpiochip*
 
 # Vérifier les périphériques audio
 aplay -l
@@ -226,6 +227,7 @@ DISCORD_BOT_TOKEN       | votre-token-discord-réel
 
 **🔌 Devices** (Section "Runtime & Resources") :
 
+**GPIO (requis pour contrôle IR Yamaha/OSRAM) :**
 - **Container path** : `/dev/gpiomem0` → **Host path** : `/dev/gpiomem0`
 - **Container path** : `/dev/gpiomem1` → **Host path** : `/dev/gpiomem1`
 - **Container path** : `/dev/gpiomem2` → **Host path** : `/dev/gpiomem2`
@@ -236,7 +238,9 @@ DISCORD_BOT_TOKEN       | votre-token-discord-réel
 - **Container path** : `/dev/gpiochip11` → **Host path** : `/dev/gpiochip11`
 - **Container path** : `/dev/gpiochip12` → **Host path** : `/dev/gpiochip12`
 - **Container path** : `/dev/gpiochip13` → **Host path** : `/dev/gpiochip13`
-  (inutile de monter /dev/gpiochip4 car c’est juste un lien vers gpiochip0)
+  (inutile de monter /dev/gpiochip4 car c'est juste un lien vers gpiochip0)
+
+**Audio :**
 
 - **Container path** : `/dev/snd` → **Host path** : `/dev/snd`
 - **Container path** : `/run/user/1000/pulse` → **Host path** : `/run/user/1000/pulse`
@@ -351,6 +355,51 @@ EOF
 1. Dire "GLaDOS" près du microphone
 2. Vérifier la réponse vocale
 3. Vérifier les logs : `docker logs glados-assistant | grep -i wake`
+
+### 4.4 Test du contrôle IR (Raspberry Pi)
+
+**Vérifier l'accès GPIO dans le container :**
+
+```bash
+# Entrer dans le container
+docker exec -it glados-assistant bash
+
+# Vérifier l'accès GPIO
+ls -l /dev/gpio*
+python3 -c "import lgpio; print('lgpio disponible')"
+```
+
+**Tester les commandes IR :**
+
+1. **Yamaha (GPIO 18 par défaut) :**
+   - "Allume l'amplificateur Yamaha"
+   - "Monte le volume"
+   - "Change la source sur CD"
+
+2. **OSRAM (GPIO 19 par défaut) :**
+   - "Allume l'ampoule OSRAM"
+   - "Change la couleur en rouge"
+   - "Monte la luminosité"
+
+**Vérifier les logs IR :**
+
+```bash
+docker logs glados-assistant | grep -i "IR\|yamaha\|osram"
+```
+
+**Configuration GPIO personnalisée :**
+
+Modifiez `config.yaml` pour personnaliser les pins GPIO :
+
+```yaml
+tools:
+  ir_yamaha:
+    enabled: true
+    ir_pin: 18  # Pin GPIO pour émetteur IR Yamaha
+  ir_osram:
+    enabled: true
+    ir_pin: 19  # Pin GPIO pour émetteur IR OSRAM
+```
 
 ---
 
